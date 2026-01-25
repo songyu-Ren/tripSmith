@@ -1,0 +1,108 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tripsmith
+      POSTGRES_PASSWORD: tripsmith
+      POSTGRES_DB: tripsmith
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: ./apps/api
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://tripsmith:tripsmith@postgres:5432/tripsmith}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      BASE_URL: ${BASE_URL:-http://localhost:3000}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-5}
+      DISABLE_DOCS: ${DISABLE_DOCS:-false}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      PROVIDER_FLIGHTS: ${PROVIDER_FLIGHTS:-mock}
+      PROVIDER_STAYS: ${PROVIDER_STAYS:-mock}
+      PROVIDER_POI: ${PROVIDER_POI:-opentripmap}
+      PROVIDER_WEATHER: ${PROVIDER_WEATHER:-openmeteo}
+      PROVIDER_ROUTING: ${PROVIDER_ROUTING:-osrm}
+      OPENTRIPMAP_API_KEY: ${OPENTRIPMAP_API_KEY:-}
+      KIWI_TEQUILA_API_KEY: ${KIWI_TEQUILA_API_KEY:-}
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8000:8000"
+
+  celery_worker:
+    build:
+      context: ./apps/api
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://tripsmith:tripsmith@postgres:5432/tripsmith}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      BASE_URL: ${BASE_URL:-http://localhost:3000}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-5}
+      DISABLE_DOCS: ${DISABLE_DOCS:-false}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      PROVIDER_FLIGHTS: ${PROVIDER_FLIGHTS:-mock}
+      PROVIDER_STAYS: ${PROVIDER_STAYS:-mock}
+      PROVIDER_POI: ${PROVIDER_POI:-opentripmap}
+      PROVIDER_WEATHER: ${PROVIDER_WEATHER:-openmeteo}
+      PROVIDER_ROUTING: ${PROVIDER_ROUTING:-osrm}
+      OPENTRIPMAP_API_KEY: ${OPENTRIPMAP_API_KEY:-}
+      KIWI_TEQUILA_API_KEY: ${KIWI_TEQUILA_API_KEY:-}
+    depends_on:
+      - postgres
+      - redis
+    command: ["celery", "-A", "tripsmith.worker", "worker", "-l", "info"]
+
+  celery_beat:
+    build:
+      context: ./apps/api
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://tripsmith:tripsmith@postgres:5432/tripsmith}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      BASE_URL: ${BASE_URL:-http://localhost:3000}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-5}
+      DISABLE_DOCS: ${DISABLE_DOCS:-false}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      PROVIDER_FLIGHTS: ${PROVIDER_FLIGHTS:-mock}
+      PROVIDER_STAYS: ${PROVIDER_STAYS:-mock}
+      PROVIDER_POI: ${PROVIDER_POI:-opentripmap}
+      PROVIDER_WEATHER: ${PROVIDER_WEATHER:-openmeteo}
+      PROVIDER_ROUTING: ${PROVIDER_ROUTING:-osrm}
+      OPENTRIPMAP_API_KEY: ${OPENTRIPMAP_API_KEY:-}
+      KIWI_TEQUILA_API_KEY: ${KIWI_TEQUILA_API_KEY:-}
+    depends_on:
+      - postgres
+      - redis
+    command: ["celery", "-A", "tripsmith.worker", "beat", "-l", "info"]
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
+
