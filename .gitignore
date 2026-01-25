@@ -4,6 +4,9 @@ node_modules
 dist
 *.tsbuildinfo
 
+# Trae IDE
+.trae
+
 # Environment variables
 .env
 .env.local
