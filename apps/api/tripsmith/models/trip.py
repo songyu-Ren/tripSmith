@@ -32,3 +32,6 @@ class Trip(Base):
     travelers: Mapped[int] = mapped_column(Integer)
     preferences: Mapped[dict] = mapped_column(JSON)
 
+    constraints_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    constraints_confirmed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+

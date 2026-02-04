@@ -5,11 +5,13 @@ import type { PlanOption } from '@tripsmith/shared'
 export function PlanCard({
   option,
   onGenerate,
-  onAlert
+  onAlert,
+  onSave
 }: {
   option: PlanOption
   onGenerate: () => void
   onAlert: () => void
+  onSave?: () => void
 }) {
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
@@ -20,9 +22,27 @@ export function PlanCard({
         </div>
         <div className="text-right">
           <div className="text-sm font-semibold">
-            {Math.round(option.metrics.total_price.amount)} {option.metrics.total_price.currency}
+            {Math.round(option.scorecard.total_cost)} {option.scorecard.currency}
           </div>
           <div className="text-xs text-zinc-400">总价</div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-5">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2 text-xs text-zinc-300">
+          费用 {Math.round(option.scorecard.cost_score)}/100
+        </div>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2 text-xs text-zinc-300">
+          时间 {Math.round(option.scorecard.time_score)}/100
+        </div>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2 text-xs text-zinc-300">
+          舒适 {Math.round(option.scorecard.comfort_score)}/100
+        </div>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2 text-xs text-zinc-300">
+          通勤 {Math.round(option.scorecard.commute_score)}/100
+        </div>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2 text-xs text-zinc-300">
+          日负荷 {Math.round(option.scorecard.daily_load_score)}/100
         </div>
       </div>
 
@@ -54,10 +74,10 @@ export function PlanCard({
 
       <div className="mt-4 flex flex-wrap gap-2 text-xs">
         <div className="rounded-full border border-zinc-800 bg-zinc-950/30 px-3 py-1 text-zinc-300">
-          总飞行 {option.metrics.total_flight_minutes} 分钟
+          旅行时间 {option.scorecard.total_travel_time_hours.toFixed(1)} 小时
         </div>
         <div className="rounded-full border border-zinc-800 bg-zinc-950/30 px-3 py-1 text-zinc-300">
-          转机 {option.metrics.transfer_count} 次
+          转机 {option.scorecard.num_transfers} 次
         </div>
         <div className="rounded-full border border-zinc-800 bg-zinc-950/30 px-3 py-1 text-zinc-300">
           日通勤估计 {option.metrics.daily_commute_minutes_estimate} 分钟
@@ -78,6 +98,15 @@ export function PlanCard({
         >
           生成详细行程
         </button>
+        {onSave ? (
+          <button
+            className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950/30 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
+            onClick={onSave}
+            type="button"
+          >
+            保存此方案
+          </button>
+        ) : null}
         <button
           className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950/30 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
           onClick={onAlert}

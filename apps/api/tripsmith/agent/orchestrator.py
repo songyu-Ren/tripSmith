@@ -3,14 +3,16 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import time
 
 from redis import Redis
 
 from tripsmith.agent.optimizer import choose_plans
-from tripsmith.agent.optimizer import compute_scores
+from tripsmith.agent.optimizer import compute_scorecard
 from tripsmith.agent.verifier import trip_days
 from tripsmith.agent.verifier import verify_itinerary
 from tripsmith.agent.verifier import verify_plans
+from tripsmith.core.sanitize import redact_obj
 from tripsmith.providers.base import GeoPoint
 from tripsmith.providers.base import PoiCandidate
 from tripsmith.providers.registry import get_flights_provider
@@ -27,6 +29,7 @@ from tripsmith.schemas.plan import Money
 from tripsmith.schemas.plan import PlanMetrics
 from tripsmith.schemas.plan import PlanOption
 from tripsmith.schemas.plan import PlansJson
+from tripsmith.schemas.plan import PlanScorecard
 from tripsmith.schemas.plan import PlanScores
 from tripsmith.schemas.plan import StaySummary
 
@@ -54,10 +57,21 @@ def _center_from_stay(stay_location: GeoPoint) -> GeoPoint:
     return GeoPoint(lat=float(stay_location.lat), lon=float(stay_location.lon))
 
 
-async def generate_plans(*, redis: Redis, trip: dict) -> tuple[PlansJson, str]:
+async def generate_plans(*, redis: Redis, trip: dict) -> tuple[PlansJson, str, list[dict]]:
     flights_provider = get_flights_provider()
     stays_provider = get_stays_provider()
     routing_provider = get_routing_provider()
+    tool_calls: list[dict] = []
+
+    def record(tool: str, input_json: dict, output_json: object, *, started: float):
+        tool_calls.append(
+            {
+                "tool": tool,
+                "input": redact_obj(input_json),
+                "output": redact_obj(output_json),
+                "latency_ms": int((time.perf_counter() - started) * 1000),
+            }
+        )
 
     start_date = trip["start_date"].isoformat() if isinstance(trip["start_date"], dt.date) else str(trip["start_date"])
     end_date = trip["end_date"].isoformat() if isinstance(trip["end_date"], dt.date) else str(trip["end_date"])
@@ -78,18 +92,24 @@ async def generate_plans(*, redis: Redis, trip: dict) -> tuple[PlansJson, str]:
     }
 
     async def fetch_flights():
+        started = time.perf_counter()
         results = await flights_provider.search(**flights_payload)
-        return [r.__dict__ for r in results]
+        out = [r.__dict__ for r in results]
+        record(type(flights_provider).__name__ + ".search", flights_payload, {"count": len(out), "items": out[:3]}, started=started)
+        return out
 
     async def fetch_stays():
+        started = time.perf_counter()
         results = await stays_provider.search(**stays_payload)
-        return [
+        out = [
             {
                 **r.__dict__,
                 "location": {"lat": r.location.lat, "lon": r.location.lon},
             }
             for r in results
         ]
+        record(type(stays_provider).__name__ + ".search", stays_payload, {"count": len(out), "items": out[:3]}, started=started)
+        return out
 
     flights_raw = await _cached(redis, key=_cache_key("flights", flights_payload), ttl_seconds=60 * 30, fn=fetch_flights)
     stays_raw = await _cached(redis, key=_cache_key("stays", stays_payload), ttl_seconds=60 * 30, fn=fetch_stays)
@@ -100,7 +120,14 @@ async def generate_plans(*, redis: Redis, trip: dict) -> tuple[PlansJson, str]:
     flights = [FlightCandidate(**f) for f in flights_raw][:20]
     stays = [StayCandidate(**{**s, "location": GeoPoint(**s["location"])}) for s in stays_raw][:20]
 
+    started = time.perf_counter()
     commute_est = await routing_provider.estimate(from_point=_to_geo(stays[0].location), to_point=_to_geo(stays[1].location), mode="transit")
+    record(
+        type(routing_provider).__name__ + ".estimate",
+        {"from": {"lat": stays[0].location.lat, "lon": stays[0].location.lon}, "to": {"lat": stays[1].location.lat, "lon": stays[1].location.lon}, "mode": "transit"},
+        commute_est.__dict__,
+        started=started,
+    )
     daily_commute_est = int(commute_est.minutes)
 
     chosen = choose_plans(flights=flights, stays=stays, budget_total=float(trip["budget_total"]), daily_commute_minutes_estimate=daily_commute_est)
@@ -108,18 +135,31 @@ async def generate_plans(*, redis: Redis, trip: dict) -> tuple[PlansJson, str]:
     for label in ("cheap", "fast", "balanced"):
         c = chosen[label]
         total_cost = float(c.flight.price_amount) + float(c.stay.total_price_amount)
-        cost_score, time_score, comfort_score = compute_scores(
+        scorecard = compute_scorecard(
             total_cost=total_cost,
+            currency=str(c.stay.currency),
             budget_total=float(trip["budget_total"]),
             flight_minutes=int(c.flight.duration_minutes),
             stops=int(c.flight.stops),
             commute_minutes=int(c.daily_commute_minutes_estimate),
         )
+        cost_score = float(scorecard["cost_score"])
+        time_score = float(scorecard["time_score"])
+        comfort_score = float(scorecard["comfort_score"])
+        commute_score = float(scorecard["commute_score"])
+        daily_load_score = float(scorecard["daily_load_score"])
         warnings: list[str] = []
         if total_cost > float(trip["budget_total"]):
             warnings.append("预算可能不足；此方案会超出预算")
         if c.flight.stops >= 2:
             warnings.append("转机较多；注意签证/行李衔接")
+        rationale_md = (
+            f"- 费用评分：{cost_score:.0f}/100（预算 {float(trip['budget_total']):.0f}）\n"
+            f"- 时间评分：{time_score:.0f}/100（飞行 {int(c.flight.duration_minutes)} 分钟）\n"
+            f"- 舒适评分：{comfort_score:.0f}/100（转机 {int(c.flight.stops)} 次）\n"
+            f"- 通勤评分：{commute_score:.0f}/100（每日通勤估计 {int(c.daily_commute_minutes_estimate)} 分钟）\n"
+            f"- 日负荷评分：{daily_load_score:.0f}/100\n"
+        )
         options.append(
             PlanOption(
                 label=label,
@@ -143,7 +183,25 @@ async def generate_plans(*, redis: Redis, trip: dict) -> tuple[PlansJson, str]:
                     transfer_count=int(c.flight.stops),
                     daily_commute_minutes_estimate=int(c.daily_commute_minutes_estimate),
                 ),
-                scores=PlanScores(cost_score=cost_score, time_score=time_score, comfort_score=comfort_score),
+                scorecard=PlanScorecard(
+                    total_cost=float(scorecard["total_cost"]),
+                    currency=str(scorecard["currency"]),
+                    total_travel_time_hours=float(scorecard["total_travel_time_hours"]),
+                    num_transfers=int(scorecard["num_transfers"]),
+                    daily_load_score=daily_load_score,
+                    commute_score=commute_score,
+                    comfort_score=comfort_score,
+                    cost_score=cost_score,
+                    time_score=time_score,
+                    rationale_md=rationale_md,
+                ),
+                scores=PlanScores(
+                    daily_load_score=daily_load_score,
+                    commute_score=commute_score,
+                    comfort_score=comfort_score,
+                    cost_score=cost_score,
+                    time_score=time_score,
+                ),
                 explanation=_explain(label, cost_score, time_score, comfort_score, warnings),
                 warnings=warnings,
             )
@@ -157,13 +215,26 @@ async def generate_plans(*, redis: Redis, trip: dict) -> tuple[PlansJson, str]:
                 opt.warnings.append("系统自检：预算约束无法满足，已输出最接近方案")
 
     explain_md = render_plans_markdown(trip=trip, plans=plans)
-    return plans, explain_md
+    return plans, explain_md, tool_calls
 
 
-async def generate_itinerary(*, redis: Redis, trip: dict, plan: PlansJson, plan_index: int) -> tuple[ItineraryJson, str]:
+async def generate_itinerary(*, redis: Redis, trip: dict, plan: PlansJson, plan_index: int) -> tuple[ItineraryJson, str, list[dict]]:
     poi_provider = get_poi_provider()
     weather_provider = get_weather_provider()
     routing_provider = get_routing_provider()
+    tool_calls: list[dict] = []
+
+    def record(tool: str, input_json: dict, output_json: object, *, started: float):
+        if len(tool_calls) >= 60:
+            return
+        tool_calls.append(
+            {
+                "tool": tool,
+                "input": redact_obj(input_json),
+                "output": redact_obj(output_json),
+                "latency_ms": int((time.perf_counter() - started) * 1000),
+            }
+        )
 
     center = GeoPoint(lat=48.8566, lon=2.3522)
     if plan.options and plan.options[0].stay and "location" in trip.get("preferences", {}):
@@ -174,15 +245,25 @@ async def generate_itinerary(*, redis: Redis, trip: dict, plan: PlansJson, plan_
     poi_payload = {"destination": trip["destination"], "center": {"lat": center.lat, "lon": center.lon}, "limit": 50}
 
     async def fetch_poi():
+        started = time.perf_counter()
         pois = await poi_provider.search(destination=trip["destination"], center=center, limit=50)
-        return [{"id": p.id, "name": p.name, "location": {"lat": p.location.lat, "lon": p.location.lon}} for p in pois]
+        out = [{"id": p.id, "name": p.name, "location": {"lat": p.location.lat, "lon": p.location.lon}} for p in pois]
+        record(type(poi_provider).__name__ + ".search", poi_payload, {"count": len(out), "items": out[:3]}, started=started)
+        return out
 
     poi_raw = await _cached(redis, key=_cache_key("poi", poi_payload), ttl_seconds=60 * 60, fn=fetch_poi)
     pois: list[PoiCandidate] = [PoiCandidate(id=p["id"], name=p["name"], location=GeoPoint(**p["location"])) for p in poi_raw]
 
     start_date = trip["start_date"].isoformat() if isinstance(trip["start_date"], dt.date) else str(trip["start_date"])
     end_date = trip["end_date"].isoformat() if isinstance(trip["end_date"], dt.date) else str(trip["end_date"])
+    started = time.perf_counter()
     weather = await weather_provider.forecast(center=center, start_date=start_date, end_date=end_date)
+    record(
+        type(weather_provider).__name__ + ".forecast",
+        {"center": {"lat": center.lat, "lon": center.lon}, "start_date": start_date, "end_date": end_date},
+        {"count": len(weather), "items": [w.__dict__ for w in weather[:3]]},
+        started=started,
+    )
     weather_map = {w.date: w.summary for w in weather}
 
     dates = trip_days(dt.date.fromisoformat(start_date), dt.date.fromisoformat(end_date))
@@ -196,7 +277,14 @@ async def generate_itinerary(*, redis: Redis, trip: dict, plan: PlansJson, plan_
         weather_summary = weather_map.get(d.isoformat(), "Forecast unavailable")
         for period in periods:
             poi = pois[idx % max(1, len(pois))] if pois else PoiCandidate(id="poi", name="Free exploration", location=center)
+            started = time.perf_counter()
             est = await routing_provider.estimate(from_point=last_point, to_point=poi.location, mode="transit")
+            record(
+                type(routing_provider).__name__ + ".estimate",
+                {"from": {"lat": last_point.lat, "lon": last_point.lon}, "to": {"lat": poi.location.lat, "lon": poi.location.lon}, "mode": "transit"},
+                est.__dict__,
+                started=started,
+            )
             items.append(
                 ItineraryItem(
                     period=period,
@@ -221,7 +309,7 @@ async def generate_itinerary(*, redis: Redis, trip: dict, plan: PlansJson, plan_
             pass
 
     md = render_itinerary_markdown(trip=trip, plan=plan, plan_index=plan_index, itinerary=itinerary)
-    return itinerary, md
+    return itinerary, md, tool_calls
 
 
 def _explain(label: str, cost_score: float, time_score: float, comfort_score: float, warnings: list[str]) -> str:

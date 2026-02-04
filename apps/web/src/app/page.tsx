@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { TripCreateRequest } from '@tripsmith/shared'
 
 import { api } from '@/lib/api'
+import { ErrorPanel } from '@/components/ErrorPanel'
 import { Field } from '@/components/Field'
 
 export default function HomePage() {
@@ -18,7 +19,7 @@ export default function HomePage() {
   const [travelers, setTravelers] = useState('1')
   const [prefs, setPrefs] = useState('balanced,walkable,food')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<unknown | null>(null)
 
   const valid = useMemo(() => {
     return (
@@ -55,7 +56,7 @@ export default function HomePage() {
       const trip = await api().createTrip(payload)
       router.push(`/trips/${trip.id}`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(e)
     } finally {
       setLoading(false)
     }
@@ -135,11 +136,7 @@ export default function HomePage() {
           </Field>
         </div>
 
-        {error ? (
-          <div className="mt-4 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-200">
-            {error}
-          </div>
-        ) : null}
+        {error ? <div className="mt-4"><ErrorPanel error={error} onRetry={submit} /></div> : null}
 
         <button
           className="mt-4 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-40"

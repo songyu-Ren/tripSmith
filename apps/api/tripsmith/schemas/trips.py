@@ -6,6 +6,9 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic import ConfigDict
+from pydantic import computed_field
+
+from tripsmith.schemas.constraints import Constraints
 
 
 class TripCreateRequest(BaseModel):
@@ -35,4 +38,11 @@ class TripDto(BaseModel):
     currency: str
     travelers: int
     preferences: dict[str, Any]
+    constraints: Constraints | None = Field(default=None, validation_alias="constraints_json")
+    constraints_confirmed_at: dt.datetime | None
+
+    @computed_field
+    @property
+    def constraints_confirmed(self) -> bool:
+        return self.constraints_confirmed_at is not None
 

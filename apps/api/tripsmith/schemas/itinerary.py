@@ -32,7 +32,8 @@ class ItineraryJson(BaseModel):
 
 
 class ItineraryCreateRequest(BaseModel):
-    plan_index: int = Field(ge=0, le=2)
+    plan_index: int = Field(ge=0)
+    plan_id: str | None = None
 
 
 class ItineraryCreateResponse(BaseModel):

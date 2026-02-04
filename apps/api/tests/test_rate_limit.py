@@ -22,6 +22,8 @@ def test_rate_limit_returns_429(client):
         }
         trip = client.post("/api/trips", json=p, headers={"X-User-Id": "u"}).json()
         trip_id = trip["id"]
+        c = client.post(f"/api/trips/{trip_id}/constraints/generate", headers={"X-User-Id": "u"}).json()
+        client.put(f"/api/trips/{trip_id}/constraints", json={"constraints": c["constraints"]}, headers={"X-User-Id": "u"})
         resp1 = client.post(f"/api/trips/{trip_id}/plan", headers={"X-User-Id": "u"})
         resp2 = client.post(f"/api/trips/{trip_id}/plan", headers={"X-User-Id": "u"})
         assert resp1.status_code == 200

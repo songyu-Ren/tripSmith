@@ -2,14 +2,22 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import asyncio
+import os
 
 from celery import Celery
 from sqlalchemy.orm import Session
 
 from tripsmith.core.config import settings
-from tripsmith.core.db import SessionLocal
+from tripsmith.core import db as db_core
 from tripsmith.core.ids import new_id
+from tripsmith.core.logging import log_event
+from tripsmith.core.redis_client import get_redis
 from tripsmith.models.alert import Alert
+from tripsmith.models.itinerary import Itinerary
+from tripsmith.models.job import Job
+from tripsmith.models.plan import Plan
+from tripsmith.models.trip import Trip
 from tripsmith.models.notification import Notification
 
 
@@ -18,6 +26,10 @@ celery_app = Celery(
     broker=settings.redis_url,
     backend=settings.redis_url,
 )
+
+if os.getenv("CELERY_ALWAYS_EAGER", "0") == "1":
+    celery_app.conf.task_always_eager = True
+    celery_app.conf.task_eager_propagates = True
 
 
 celery_app.conf.beat_schedule = {
@@ -30,7 +42,7 @@ celery_app.conf.beat_schedule = {
 
 @celery_app.task(name="tripsmith.refresh_alerts")
 def refresh_alerts() -> int:
-    db: Session = SessionLocal()
+    db: Session = db_core.SessionLocal()
     try:
         alerts = db.query(Alert).filter(Alert.is_active == True).all()  # noqa: E712
         count = 0
@@ -79,5 +91,157 @@ def _check_one(db: Session, alert: Alert) -> None:
         status="sent",
     )
     db.add(n)
-    print(f"[notify] email placeholder: {payload}")
+    log_event("notify_placeholder", alert_id=alert.id, trip_id=alert.trip_id, channel="email", payload=payload)
+
+
+def _update_job(db: Session, job: Job, *, status: str | None = None, progress: int | None = None, message: str | None = None, result_json: dict | None = None) -> None:
+    if status is not None:
+        job.status = status
+    if progress is not None:
+        job.progress = int(progress)
+    if message is not None:
+        job.message = message[:256]
+    if result_json is not None:
+        job.result_json = result_json
+    job.updated_at = dt.datetime.now(dt.timezone.utc)
+    db.add(job)
+    db.commit()
+
+
+@celery_app.task(name="tripsmith.run_plan_job")
+def run_plan_job(job_id: str) -> None:
+    from tripsmith.agent.orchestrator import generate_plans
+
+    db: Session = db_core.SessionLocal()
+    try:
+        job: Job | None = db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return
+        _update_job(db, job, status="running", progress=5, message="启动任务")
+
+        trip: Trip | None = db.query(Trip).filter(Trip.id == job.trip_id, Trip.user_id == job.user_id).first()
+        if not trip:
+            _update_job(db, job, status="failed", progress=100, message="trip not found")
+            return
+        if trip.constraints_confirmed_at is None:
+            _update_job(db, job, status="failed", progress=100, message="constraints not confirmed")
+            return
+
+        redis = get_redis()
+        _update_job(db, job, progress=15, message="抓取候选数据")
+
+        trip_dict = {
+            "id": trip.id,
+            "user_id": trip.user_id,
+            "created_at": trip.created_at,
+            "origin": trip.origin,
+            "destination": trip.destination,
+            "start_date": trip.start_date,
+            "end_date": trip.end_date,
+            "flexible_days": trip.flexible_days,
+            "budget_total": float(trip.budget_total),
+            "currency": trip.currency,
+            "travelers": trip.travelers,
+            "preferences": trip.preferences or {},
+            "constraints": trip.constraints_json,
+            "constraints_confirmed_at": trip.constraints_confirmed_at,
+        }
+
+        _update_job(db, job, progress=35, message="生成方案")
+        plans, explain_md, _tool_calls = asyncio.run(generate_plans(redis=redis, trip=trip_dict))
+        _update_job(db, job, progress=75, message="写入数据库")
+
+        plan_row = Plan(
+            id=new_id(),
+            trip_id=trip.id,
+            created_at=dt.datetime.now(dt.timezone.utc),
+            plans_json=plans.model_dump(mode="json"),
+            explain_md=explain_md,
+        )
+        db.add(plan_row)
+        db.commit()
+
+        _update_job(db, job, status="succeeded", progress=100, message="完成", result_json={"plan_id": plan_row.id})
+    except Exception as e:
+        try:
+            job = db.query(Job).filter(Job.id == job_id).first()
+            if job:
+                _update_job(db, job, status="failed", progress=100, message=f"failed: {type(e).__name__}")
+        finally:
+            raise
+    finally:
+        db.close()
+
+
+@celery_app.task(name="tripsmith.run_itinerary_job")
+def run_itinerary_job(job_id: str) -> None:
+    from tripsmith.agent.orchestrator import generate_itinerary
+    from tripsmith.schemas.plan import PlansJson
+
+    db: Session = db_core.SessionLocal()
+    try:
+        job: Job | None = db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return
+        _update_job(db, job, status="running", progress=5, message="启动任务")
+
+        trip: Trip | None = db.query(Trip).filter(Trip.id == job.trip_id, Trip.user_id == job.user_id).first()
+        if not trip:
+            _update_job(db, job, status="failed", progress=100, message="trip not found")
+            return
+        plan_id = (job.result_json or {}).get("plan_id")
+        if isinstance(plan_id, str) and plan_id:
+            plan_row = db.query(Plan).filter(Plan.id == plan_id, Plan.trip_id == job.trip_id).first()
+        else:
+            plan_row = db.query(Plan).filter(Plan.trip_id == job.trip_id).order_by(Plan.created_at.desc()).first()
+        if not plan_row:
+            _update_job(db, job, status="failed", progress=100, message="plan required")
+            return
+
+        plan_index = int((job.result_json or {}).get("plan_index", 0))
+        plans_json = PlansJson.model_validate(plan_row.plans_json)
+        redis = get_redis()
+
+        trip_dict = {
+            "id": trip.id,
+            "user_id": trip.user_id,
+            "created_at": trip.created_at,
+            "origin": trip.origin,
+            "destination": trip.destination,
+            "start_date": trip.start_date,
+            "end_date": trip.end_date,
+            "flexible_days": trip.flexible_days,
+            "budget_total": float(trip.budget_total),
+            "currency": trip.currency,
+            "travelers": trip.travelers,
+            "preferences": trip.preferences or {},
+            "constraints": trip.constraints_json,
+            "constraints_confirmed_at": trip.constraints_confirmed_at,
+        }
+
+        _update_job(db, job, progress=25, message="生成逐日行程")
+        itinerary_json, itinerary_md, _tool_calls = asyncio.run(generate_itinerary(redis=redis, trip=trip_dict, plan=plans_json, plan_index=plan_index))
+        _update_job(db, job, progress=80, message="写入数据库")
+
+        it_row = Itinerary(
+            id=new_id(),
+            trip_id=trip.id,
+            plan_index=plan_index,
+            created_at=dt.datetime.now(dt.timezone.utc),
+            itinerary_json=itinerary_json.model_dump(mode="json"),
+            itinerary_md=itinerary_md,
+        )
+        db.add(it_row)
+        db.commit()
+
+        _update_job(db, job, status="succeeded", progress=100, message="完成", result_json={"itinerary_id": it_row.id, "itinerary_json": itinerary_json.model_dump(mode="json"), "itinerary_md": itinerary_md})
+    except Exception as e:
+        try:
+            job = db.query(Job).filter(Job.id == job_id).first()
+            if job:
+                _update_job(db, job, status="failed", progress=100, message=f"failed: {type(e).__name__}")
+        finally:
+            raise
+    finally:
+        db.close()
 

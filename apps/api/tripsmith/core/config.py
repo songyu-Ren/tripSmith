@@ -22,6 +22,10 @@ class Settings(BaseSettings):
 
     base_url: str = "http://localhost:3000"
     web_origin: str = "http://localhost:3000"
+    allowed_origins: str = "http://localhost:3000"
+
+    dev_mode: int = 1
+    commit_hash: str | None = None
 
     rate_limit_per_minute: int = 5
     disable_docs: bool = False
@@ -32,4 +36,11 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def cors_origins() -> list[str]:
+    if settings.dev_mode:
+        return ["http://localhost:3000"]
+    origins = [o.strip() for o in (settings.allowed_origins or "").split(",") if o.strip()]
+    return origins
 

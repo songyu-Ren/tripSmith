@@ -28,9 +28,24 @@ class StaySummary(BaseModel):
 
 
 class PlanScores(BaseModel):
+    daily_load_score: float = Field(ge=0, le=100)
+    commute_score: float = Field(ge=0, le=100)
+    comfort_score: float = Field(ge=0, le=100)
     cost_score: float = Field(ge=0, le=100)
     time_score: float = Field(ge=0, le=100)
+
+
+class PlanScorecard(BaseModel):
+    total_cost: float
+    currency: str
+    total_travel_time_hours: float
+    num_transfers: int
+    daily_load_score: float = Field(ge=0, le=100)
+    commute_score: float = Field(ge=0, le=100)
     comfort_score: float = Field(ge=0, le=100)
+    cost_score: float = Field(ge=0, le=100)
+    time_score: float = Field(ge=0, le=100)
+    rationale_md: str
 
 
 class PlanMetrics(BaseModel):
@@ -46,6 +61,7 @@ class PlanOption(BaseModel):
     flight: FlightSummary
     stay: StaySummary
     metrics: PlanMetrics
+    scorecard: PlanScorecard
     scores: PlanScores
     explanation: str
     warnings: list[str] = Field(default_factory=list)

@@ -1,9 +1,15 @@
 import {
   AlertCreateRequest,
   AlertCreateResponse,
+  ConstraintsGenerateResponse,
+  ConstraintsGetResponse,
+  ConstraintsUpdateRequest,
   ItineraryCreateRequest,
-  ItineraryCreateResponse,
-  PlanCreateResponse,
+  JobCreateResponse,
+  JobDto,
+  SavePlanRequest,
+  SavePlanResponse,
+  SavedPlansListResponse,
   TripCreateRequest,
   TripDto,
   TripGetResponse,
@@ -16,10 +22,27 @@ export type ApiClientOptions = {
   userId: string
 }
 
-export type ApiError = {
+export class ApiError extends Error {
   status: number
   data?: ErrorResponse
-  message: string
+  errorCode?: string
+  requestId?: string
+  retryAfterSeconds?: number
+
+  constructor(init: {
+    status: number
+    message: string
+    data?: ErrorResponse
+    retryAfterSeconds?: number
+  }) {
+    super(init.message)
+    this.name = 'ApiError'
+    this.status = init.status
+    this.data = init.data
+    this.errorCode = init.data?.error_code
+    this.requestId = init.data?.request_id
+    this.retryAfterSeconds = init.retryAfterSeconds
+  }
 }
 
 async function parseError(resp: Response): Promise<ErrorResponse | undefined> {
@@ -52,16 +75,31 @@ async function requestJson<T>(
   }
 
   const data = await parseError(resp)
-  const err: ApiError = {
+  const retryAfterHeader = resp.headers.get('retry-after')
+  const retryAfterSeconds =
+    retryAfterHeader && /^\d+$/.test(retryAfterHeader)
+      ? parseInt(retryAfterHeader, 10)
+      : undefined
+
+  throw new ApiError({
     status: resp.status,
     data,
-    message: data?.error?.message || `HTTP ${resp.status}`
-  }
-  throw err
+    retryAfterSeconds,
+    message: data?.message || `HTTP ${resp.status}`
+  })
 }
 
 export function createApiClient(opts: ApiClientOptions) {
-  const retry = { retries: 2, baseDelayMs: 250 }
+  const retry = {
+    retries: 2,
+    baseDelayMs: 250,
+    getDelayMs: (err: unknown, attemptIndex: number) => {
+      if (err instanceof ApiError && err.retryAfterSeconds) {
+        return err.retryAfterSeconds * 1000
+      }
+      return 250 * Math.pow(2, attemptIndex)
+    }
+  }
 
   return {
     createTrip: (payload: TripCreateRequest) =>
@@ -75,13 +113,45 @@ export function createApiClient(opts: ApiClientOptions) {
         method: 'GET'
       }), retry),
 
+    getConstraints: (tripId: string) =>
+      withRetry(() => requestJson<ConstraintsGetResponse>(opts, `/api/trips/${tripId}/constraints`, {
+        method: 'GET'
+      }), retry),
+
+    generateConstraints: (tripId: string) =>
+      withRetry(() => requestJson<ConstraintsGenerateResponse>(opts, `/api/trips/${tripId}/constraints/generate`, {
+        method: 'POST'
+      }), retry),
+
+    confirmConstraints: (tripId: string, payload: ConstraintsUpdateRequest) =>
+      withRetry(() => requestJson<ConstraintsGetResponse>(opts, `/api/trips/${tripId}/constraints`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      }), retry),
+
+    getJob: (jobId: string) =>
+      withRetry(() => requestJson<JobDto>(opts, `/api/jobs/${jobId}`, {
+        method: 'GET'
+      }), retry),
+
     createPlan: (tripId: string) =>
-      withRetry(() => requestJson<PlanCreateResponse>(opts, `/api/trips/${tripId}/plan`, {
+      withRetry(() => requestJson<JobCreateResponse>(opts, `/api/trips/${tripId}/plan`, {
         method: 'POST'
       }), retry),
 
     createItinerary: (tripId: string, payload: ItineraryCreateRequest) =>
-      withRetry(() => requestJson<ItineraryCreateResponse>(opts, `/api/trips/${tripId}/itinerary`, {
+      withRetry(() => requestJson<JobCreateResponse>(opts, `/api/trips/${tripId}/itinerary`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      }), retry),
+
+    listSavedPlans: (tripId: string) =>
+      withRetry(() => requestJson<SavedPlansListResponse>(opts, `/api/trips/${tripId}/saved_plans`, {
+        method: 'GET'
+      }), retry),
+
+    savePlan: (tripId: string, payload: SavePlanRequest) =>
+      withRetry(() => requestJson<SavePlanResponse>(opts, `/api/trips/${tripId}/saved_plans`, {
         method: 'POST',
         body: JSON.stringify(payload)
       }), retry),

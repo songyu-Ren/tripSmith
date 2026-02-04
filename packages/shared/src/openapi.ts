@@ -1,9 +1,8 @@
 export type ErrorResponse = {
-  error: {
-    code: string
-    message: string
-    details?: Record<string, unknown> | null
-  }
+  error_code: string
+  message: string
+  request_id: string
+  details?: unknown
 }
 
 export type TripCreateRequest = {
@@ -31,6 +30,9 @@ export type TripDto = {
   currency: string
   travelers: number
   preferences: Record<string, unknown>
+  constraints?: Constraints | null
+  constraints_confirmed_at?: string | null
+  constraints_confirmed?: boolean
 }
 
 export type Money = { amount: number; currency: string }
@@ -51,9 +53,24 @@ export type StaySummary = {
 }
 
 export type PlanScores = {
+  daily_load_score: number
+  commute_score: number
   cost_score: number
   time_score: number
   comfort_score: number
+}
+
+export type PlanScorecard = {
+  total_cost: number
+  currency: string
+  total_travel_time_hours: number
+  num_transfers: number
+  daily_load_score: number
+  commute_score: number
+  comfort_score: number
+  cost_score: number
+  time_score: number
+  rationale_md: string
 }
 
 export type PlanMetrics = {
@@ -69,6 +86,7 @@ export type PlanOption = {
   flight: FlightSummary
   stay: StaySummary
   metrics: PlanMetrics
+  scorecard: PlanScorecard
   scores: PlanScores
   explanation: string
   warnings: string[]
@@ -92,7 +110,55 @@ export type TripGetResponse = {
   latest_explain_md: string | null
 }
 
-export type ItineraryCreateRequest = { plan_index: number }
+export type JobDto = {
+  id: string
+  trip_id: string
+  type: 'plan' | 'itinerary'
+  status: 'queued' | 'running' | 'succeeded' | 'failed'
+  progress: number
+  message: string
+  result_json: Record<string, unknown> | null
+  created_at: string
+  updated_at: string
+}
+
+export type JobCreateResponse = { job_id: string }
+
+export type SavedPlanDto = {
+  id: string
+  trip_id: string
+  plan_id: string
+  plan_index: number
+  created_at: string
+  label: string
+}
+
+export type SavePlanRequest = { plan_id: string; plan_index: number; label: string }
+
+export type SavePlanResponse = { saved_plan: SavedPlanDto }
+
+export type SavedPlansListResponse = { saved_plans: SavedPlanDto[] }
+
+export type Constraints = {
+  pace: 'relaxed' | 'balanced' | 'packed'
+  walking_tolerance_km_per_day: number
+  max_daily_activity_hours?: number
+  max_daily_commute_hours?: number
+  max_transfer_count: number
+  hotel_star_min?: number | null
+  night_flight_allowed: boolean
+}
+
+export type ConstraintsGenerateResponse = { constraints: Constraints }
+
+export type ConstraintsUpdateRequest = { constraints: Constraints }
+
+export type ConstraintsGetResponse = {
+  constraints: Constraints | null
+  confirmed: boolean
+}
+
+export type ItineraryCreateRequest = { plan_index: number; plan_id?: string | null }
 
 export type Commute = { mode: 'walk' | 'drive' | 'transit' | 'estimate'; minutes: number }
 

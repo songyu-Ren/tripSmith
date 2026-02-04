@@ -1,6 +1,7 @@
 export type RetryOptions = {
   retries: number
   baseDelayMs: number
+  getDelayMs?: (err: unknown, attemptIndex: number) => number | undefined
 }
 
 export async function withRetry<T>(
@@ -14,7 +15,8 @@ export async function withRetry<T>(
     } catch (err) {
       lastErr = err
       if (i === opts.retries) break
-      const delay = opts.baseDelayMs * Math.pow(2, i)
+      const customDelay = opts.getDelayMs?.(err, i)
+      const delay = customDelay ?? opts.baseDelayMs * Math.pow(2, i)
       await new Promise((r) => setTimeout(r, delay))
     }
   }

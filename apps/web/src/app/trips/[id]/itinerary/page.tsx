@@ -3,20 +3,23 @@
 import Link from 'next/link'
 import { useParams, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { ItineraryCreateResponse } from '@tripsmith/shared'
+import type { ItineraryJson, JobDto } from '@tripsmith/shared'
 
 import { api } from '@/lib/api'
 import { getApiBaseUrl } from '@/lib/env'
+import { ErrorPanel } from '@/components/ErrorPanel'
 
 export default function TripItineraryPage() {
   const params = useParams<{ id: string }>()
   const sp = useSearchParams()
   const tripId = params.id
   const planIndex = Number(sp.get('plan') || '0')
+  const planId = sp.get('planId')
 
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<ItineraryCreateResponse | null>(null)
+  const [error, setError] = useState<unknown | null>(null)
+  const [job, setJob] = useState<JobDto | null>(null)
+  const [result, setResult] = useState<{ itinerary_id: string; itinerary_json: ItineraryJson; itinerary_md: string } | null>(null)
 
   const exportIcs = useMemo(() => {
     return `${getApiBaseUrl()}/api/trips/${tripId}/export/ics`
@@ -29,19 +32,54 @@ export default function TripItineraryPage() {
   const generate = useCallback(async () => {
     setLoading(true)
     setError(null)
+    setResult(null)
     try {
-      const it = await api().createItinerary(tripId, { plan_index: planIndex })
-      setResult(it)
+      const r = await api().createItinerary(tripId, { plan_index: planIndex, plan_id: planId })
+      const j = await api().getJob(r.job_id)
+      setJob(j)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(e)
     } finally {
       setLoading(false)
     }
-  }, [tripId, planIndex])
+  }, [tripId, planIndex, planId])
 
   useEffect(() => {
     void generate()
   }, [generate])
+
+  useEffect(() => {
+    if (!job || (job.status !== 'queued' && job.status !== 'running')) return
+    let stop = false
+    const tick = async () => {
+      try {
+        const j = await api().getJob(job.id)
+        if (stop) return
+        setJob(j)
+        if (j.status === 'succeeded') {
+          const rj = (j.result_json || {}) as any
+          if (rj.itinerary_json && rj.itinerary_md && rj.itinerary_id) {
+            setResult({
+              itinerary_id: String(rj.itinerary_id),
+              itinerary_json: rj.itinerary_json as ItineraryJson,
+              itinerary_md: String(rj.itinerary_md)
+            })
+          }
+        }
+        if (j.status === 'failed') {
+          throw new Error(j.message || '任务失败')
+        }
+      } catch (e) {
+        if (!stop) setError(e)
+      }
+    }
+    const id = setInterval(() => void tick(), 1000)
+    void tick()
+    return () => {
+      stop = true
+      clearInterval(id)
+    }
+  }, [job])
 
   return (
     <div className="space-y-6">
@@ -69,10 +107,21 @@ export default function TripItineraryPage() {
         </div>
       ) : null}
 
-      {error ? (
-        <div className="rounded-xl border border-red-900/60 bg-red-950/40 p-4 text-sm text-red-200">
-          {error}
+      {job && job.status !== 'succeeded' ? (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold">任务进度</div>
+            <div className="text-xs text-zinc-400">{job.progress}%</div>
+          </div>
+          <div className="mt-2 h-2 w-full overflow-hidden rounded bg-zinc-800">
+            <div className="h-2 bg-indigo-600" style={{ width: `${job.progress}%` }} />
+          </div>
+          <div className="mt-2 text-xs text-zinc-400">{job.message}</div>
         </div>
+      ) : null}
+
+      {error ? (
+        <ErrorPanel error={error} onRetry={generate} />
       ) : null}
 
       {result?.itinerary_json ? (
