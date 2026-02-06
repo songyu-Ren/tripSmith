@@ -115,9 +115,13 @@ export type JobDto = {
   trip_id: string
   type: 'plan' | 'itinerary'
   status: 'queued' | 'running' | 'succeeded' | 'failed'
+  stage: string
   progress: number
   message: string
   result_json: Record<string, unknown> | null
+  error_code?: string | null
+  error_message?: string | null
+  next_action?: string | null
   created_at: string
   updated_at: string
 }

@@ -48,22 +48,23 @@ export function AlertModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-      <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-4 shadow-2xl">
+      <div className="w-full max-w-md ts-card">
         <div className="flex items-center justify-between">
           <div className="text-sm font-semibold">订阅价格提醒</div>
           <button
-            className="rounded-md px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
+            className="ts-btn-secondary px-2 py-1 text-xs"
             onClick={onClose}
             type="button"
+            aria-label="关闭订阅弹窗"
           >
             关闭
           </button>
         </div>
         <div className="mt-4 space-y-3">
           <div className="space-y-1">
-            <div className="text-xs text-zinc-400">类型</div>
+            <div className="text-xs ts-muted">类型</div>
             <select
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+              className="ts-input"
               value={type}
               onChange={(e) => setType(e.target.value as AlertCreateRequest['type'])}
             >
@@ -74,18 +75,18 @@ export function AlertModal({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <div className="text-xs text-zinc-400">阈值（USD）</div>
+              <div className="text-xs ts-muted">阈值（USD）</div>
               <input
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+                className="ts-input"
                 value={threshold}
                 onChange={(e) => setThreshold(e.target.value)}
                 inputMode="decimal"
               />
             </div>
             <div className="space-y-1">
-              <div className="text-xs text-zinc-400">频率（分钟）</div>
+              <div className="text-xs ts-muted">频率（分钟）</div>
               <input
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+                className="ts-input"
                 value={frequency}
                 onChange={(e) => setFrequency(e.target.value)}
                 inputMode="numeric"
@@ -93,12 +94,12 @@ export function AlertModal({
             </div>
           </div>
           {error ? (
-            <div className="rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-200">
+            <div className="rounded-2xl px-3 py-2 text-xs text-red-200" style={{ border: '1px solid rgba(248,113,113,0.35)', background: 'rgba(127,29,29,0.22)' }}>
               {error}
             </div>
           ) : null}
           <button
-            className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-40"
+            className="ts-btn-primary w-full"
             onClick={submit}
             disabled={!valid || loading}
             type="button"

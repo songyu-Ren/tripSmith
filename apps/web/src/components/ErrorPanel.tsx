@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ApiError } from '@tripsmith/shared'
 
 type Props = {
@@ -19,9 +19,36 @@ function getRequestId(err: unknown): string | null {
   return null
 }
 
+function getErrorCode(err: unknown): string | null {
+  if (err instanceof ApiError) return err.errorCode || null
+  return null
+}
+
+function getDetails(err: unknown): unknown {
+  if (err instanceof ApiError) return err.data?.details
+  return undefined
+}
+
 export function ErrorPanel({ error, onRetry }: Props) {
   const [retrying, setRetrying] = useState(false)
   const requestId = getRequestId(error)
+  const errorCode = getErrorCode(error)
+  const dev = process.env.NODE_ENV !== 'production'
+
+  const copyText = useMemo(() => {
+    if (error instanceof ApiError) {
+      const payload: Record<string, unknown> = {
+        status: error.status,
+        error_code: error.errorCode,
+        request_id: error.requestId,
+        message: error.message
+      }
+      if (dev && error.data?.details != null) payload.details = error.data.details
+      return JSON.stringify(payload, null, 2)
+    }
+    if (error instanceof Error) return `${error.name}: ${error.message}`
+    return String(error)
+  }, [dev, error])
 
   async function handleRetry() {
     if (retrying) return
@@ -41,16 +68,27 @@ export function ErrorPanel({ error, onRetry }: Props) {
   }
 
   return (
-    <div className="rounded-xl border border-red-900/60 bg-red-950/40 p-4 text-sm text-red-200">
-      <div className="space-y-1">
-        <div>{getMessage(error)}</div>
-        {requestId ? (
-          <div className="text-xs text-red-200/70">request_id: {requestId}</div>
+    <div className="ts-card-strong text-sm" style={{ borderColor: 'rgba(248,113,113,0.35)' }}>
+      <div className="space-y-2">
+        <div className="text-red-200">{getMessage(error)}</div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-red-200/70">
+          {errorCode ? <div>error_code: {errorCode}</div> : null}
+          {requestId ? <div>request_id: {requestId}</div> : null}
+        </div>
+        {dev && getDetails(error) != null ? (
+          <pre className="max-h-48 overflow-auto rounded-xl bg-black/30 p-3 text-xs text-red-100/80">
+            {JSON.stringify(getDetails(error), null, 2)}
+          </pre>
         ) : null}
       </div>
-      <div className="mt-3">
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button className="ts-btn-secondary text-xs" type="button" onClick={() => void navigator.clipboard.writeText(copyText)}>
+          复制详情
+        </button>
         <button
-          className="rounded-lg bg-red-700 px-3 py-2 text-xs font-medium hover:bg-red-600 disabled:opacity-40"
+          className="ts-btn text-xs text-white"
+          style={{ background: 'rgba(220,38,38,0.85)' }}
           type="button"
           disabled={retrying}
           onClick={() => void handleRetry()}

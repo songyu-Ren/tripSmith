@@ -20,9 +20,12 @@ class Job(Base):
     user_id: Mapped[str] = mapped_column(String(64), index=True)
     type: Mapped[str] = mapped_column(String(16), index=True)
     status: Mapped[str] = mapped_column(String(16), index=True)
+    stage: Mapped[str] = mapped_column(String(32), index=True, default="QUEUED")
     progress: Mapped[int] = mapped_column(Integer)
     message: Mapped[str] = mapped_column(String(256))
     result_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    next_action: Mapped[str | None] = mapped_column(String(256), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), index=True)
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), index=True)
-

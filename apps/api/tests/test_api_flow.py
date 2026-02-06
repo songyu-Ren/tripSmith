@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import datetime as dt
 
+from tripsmith.core import db as db_core
+from tripsmith.core.ids import new_id
+from tripsmith.models.job import Job
+from tripsmith.worker import run_plan_job
+
 
 def _trip_payload():
     today = dt.date(2030, 1, 1)
@@ -31,9 +36,76 @@ def test_create_trip_validation_bad_dates(client):
     resp = client.post("/api/trips", json=p, headers={"X-User-Id": "u"})
     assert resp.status_code == 400
     body = resp.json()
-    assert body["error_code"] == "bad_dates"
+    assert body["error_code"] == "VALIDATION.BAD_DATES"
     assert "request_id" in body
     assert resp.headers.get("X-Request-Id")
+
+
+def test_validation_schema_invalid_has_layered_error_code(client):
+    resp = client.post("/api/trips", json={"origin": "SFO"}, headers={"X-User-Id": "u"})
+    assert resp.status_code == 422
+    body = resp.json()
+    assert body["error_code"] == "VALIDATION.SCHEMA_INVALID"
+    assert body["request_id"]
+    assert resp.headers.get("X-Request-Id") == body["request_id"]
+
+
+def test_request_id_echoes_back_in_header_and_body(client):
+    rid = "rid_test_123"
+    resp = client.get("/api/health", headers={"X-Request-Id": rid})
+    assert resp.status_code == 200
+    assert resp.headers.get("X-Request-Id") == rid
+
+
+def test_job_includes_stage_and_failure_fields(client):
+    trip = client.post("/api/trips", json=_trip_payload(), headers={"X-User-Id": "u"}).json()
+    trip_id = trip["id"]
+    c = client.post(f"/api/trips/{trip_id}/constraints/generate", headers={"X-User-Id": "u"}).json()
+    client.put(f"/api/trips/{trip_id}/constraints", json={"constraints": c["constraints"]}, headers={"X-User-Id": "u"})
+    resp = client.post(f"/api/trips/{trip_id}/plan", headers={"X-User-Id": "u"})
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+    job = client.get(f"/api/jobs/{job_id}", headers={"X-User-Id": "u"}).json()
+    assert job["status"] == "succeeded"
+    assert job["stage"] == "COMPLETE"
+    assert job["error_code"] is None
+    assert job["error_message"] is None
+    assert job["next_action"] is None
+
+
+def test_job_failure_writes_next_action(client):
+    job_id = new_id()
+    now = dt.datetime.now(dt.timezone.utc)
+    db = db_core.SessionLocal()
+    try:
+        row = Job(
+            id=job_id,
+            trip_id="missing_trip",
+            user_id="u",
+            type="plan",
+            status="queued",
+            stage="QUEUED",
+            progress=0,
+            message="排队中",
+            result_json=None,
+            error_code=None,
+            error_message=None,
+            next_action=None,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(row)
+        db.commit()
+    finally:
+        db.close()
+
+    run_plan_job.delay(job_id)
+    job = client.get(f"/api/jobs/{job_id}", headers={"X-User-Id": "u"}).json()
+    assert job["status"] == "failed"
+    assert job["stage"] == "FAILED"
+    assert isinstance(job["error_code"], str) and job["error_code"].startswith("JOB.")
+    assert job["error_message"]
+    assert job["next_action"]
 
 
 def test_plan_generation_returns_three_options(client):

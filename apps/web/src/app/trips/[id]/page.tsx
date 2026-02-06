@@ -10,6 +10,7 @@ import { AlertModal } from '@/components/AlertModal'
 import { ErrorPanel } from '@/components/ErrorPanel'
 import { Field } from '@/components/Field'
 import { PlanCard } from '@/components/PlanCard'
+import { useJobPoll } from '@/lib/useJobPoll'
 
 export default function TripResultsPage() {
   const params = useParams<{ id: string }>()
@@ -25,8 +26,6 @@ export default function TripResultsPage() {
   const [constraintsConfirmed, setConstraintsConfirmed] = useState(false)
   const [constraintsBusy, setConstraintsBusy] = useState(false)
   const [planJobId, setPlanJobId] = useState<string | null>(null)
-  const [planProgress, setPlanProgress] = useState<number>(0)
-  const [planStage, setPlanStage] = useState<string>('queued')
   const [savedPlans, setSavedPlans] = useState<SavedPlanDto[]>([])
   const [saveBusyIndex, setSaveBusyIndex] = useState<number | null>(null)
 
@@ -56,36 +55,24 @@ export default function TripResultsPage() {
     void load()
   }, [load])
 
+  const { job: planJob, error: planJobPollError } = useJobPoll(planJobId, {
+    onSucceeded: async () => {
+      setPlanJobId(null)
+      setGenLoading(false)
+      await load()
+    },
+    onFailed: async (j) => {
+      setPlanJobId(null)
+      setGenLoading(false)
+      const msg = j.error_message || j.message || '任务失败'
+      const next = j.next_action ? `\n\n下一步：${j.next_action}` : ''
+      throw new Error(`${msg}${next}`)
+    }
+  })
+
   useEffect(() => {
-    if (!planJobId) return
-    let stop = false
-    const tick = async () => {
-      try {
-        const j = await api().getJob(planJobId)
-        if (stop) return
-        setPlanProgress(j.progress)
-        setPlanStage(j.message || j.status)
-        if (j.status === 'succeeded') {
-          setPlanJobId(null)
-          setGenLoading(false)
-          await load()
-        }
-        if (j.status === 'failed') {
-          setPlanJobId(null)
-          setGenLoading(false)
-          throw new Error(j.message || '任务失败')
-        }
-      } catch (e) {
-        if (!stop) setError(e)
-      }
-    }
-    const id = setInterval(() => void tick(), 1000)
-    void tick()
-    return () => {
-      stop = true
-      clearInterval(id)
-    }
-  }, [planJobId, load])
+    if (planJobPollError) setError(planJobPollError)
+  }, [planJobPollError])
 
   async function generatePlans() {
     setGenLoading(true)
@@ -95,8 +82,6 @@ export default function TripResultsPage() {
         throw new Error('请先确认约束条件，再生成方案。')
       }
       const r = await api().createPlan(tripId)
-      setPlanProgress(0)
-      setPlanStage('queued')
       setPlanJobId(r.job_id)
     } catch (e) {
       setGenLoading(false)
@@ -158,7 +143,7 @@ export default function TripResultsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div className="space-y-1">
-          <div className="text-xs text-zinc-400">
+          <div className="text-xs ts-muted">
             <Link className="hover:underline" href="/">
               ← 返回
             </Link>
@@ -166,7 +151,7 @@ export default function TripResultsPage() {
           <h1 className="text-lg font-semibold">方案结果</h1>
         </div>
         <button
-          className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-40"
+          className="ts-btn-primary"
           onClick={generatePlans}
           disabled={genLoading || !constraintsConfirmed}
           type="button"
@@ -176,8 +161,10 @@ export default function TripResultsPage() {
       </div>
 
       {loading ? (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">
-          加载中…
+        <div className="ts-card space-y-3">
+          <div className="ts-skeleton h-5 w-32" />
+          <div className="ts-skeleton h-4 w-full" />
+          <div className="ts-skeleton h-4 w-5/6" />
         </div>
       ) : null}
 
@@ -191,28 +178,28 @@ export default function TripResultsPage() {
       ) : null}
 
       {planJobId ? (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+        <div className="ts-card">
           <div className="flex items-center justify-between gap-3">
             <div className="text-sm font-semibold">生成方案中…</div>
-            <div className="text-xs text-zinc-400">{planProgress}%</div>
+            <div className="text-xs ts-muted">{planJob?.progress ?? 0}%</div>
           </div>
           <div className="mt-2 h-2 w-full overflow-hidden rounded bg-zinc-800">
-            <div className="h-2 bg-indigo-600" style={{ width: `${planProgress}%` }} />
+            <div className="h-2 bg-indigo-600" style={{ width: `${planJob?.progress ?? 0}%` }} />
           </div>
-          <div className="mt-2 text-xs text-zinc-400">{planStage}</div>
+          <div className="mt-2 text-xs ts-muted">{planJob?.message || planJob?.stage || '排队中'}</div>
         </div>
       ) : null}
 
       {data?.trip ? (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+        <div className="ts-card">
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <div className="font-semibold">
               {data.trip.origin} → {data.trip.destination}
             </div>
-            <div className="text-zinc-400">
+            <div className="ts-muted">
               {data.trip.start_date} ~ {data.trip.end_date}
             </div>
-            <div className="text-zinc-400">
+            <div className="ts-muted">
               预算 {data.trip.budget_total} {data.trip.currency} · {data.trip.travelers} 人
             </div>
           </div>
@@ -220,16 +207,16 @@ export default function TripResultsPage() {
       ) : null}
 
       {!constraintsConfirmed ? (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+        <div className="ts-card">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold">确认约束</div>
-              <div className="mt-1 text-xs text-zinc-400">
+              <div className="mt-1 text-xs ts-muted">
                 系统会先生成可解释的约束条件，你可微调后确认，再开始生成方案。
               </div>
             </div>
             <button
-              className="rounded-lg border border-zinc-700 bg-zinc-950/30 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800 disabled:opacity-40"
+              className="ts-btn-secondary"
               onClick={() => void generateConstraints()}
               disabled={constraintsBusy}
               type="button"
@@ -242,7 +229,7 @@ export default function TripResultsPage() {
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Field label="节奏 (pace)">
                 <select
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+                  className="ts-input"
                   value={constraints.pace}
                   onChange={(e) =>
                     setConstraints({ ...constraints, pace: e.target.value as Constraints['pace'] })
@@ -255,7 +242,7 @@ export default function TripResultsPage() {
               </Field>
               <Field label="每日步行容忍 (km)">
                 <input
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+                  className="ts-input"
                   inputMode="decimal"
                   value={String(constraints.walking_tolerance_km_per_day)}
                   onChange={(e) =>
@@ -265,7 +252,7 @@ export default function TripResultsPage() {
               </Field>
               <Field label="每日活动上限 (小时)">
                 <input
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+                  className="ts-input"
                   inputMode="decimal"
                   value={String(constraints.max_daily_activity_hours ?? 8)}
                   onChange={(e) =>
@@ -275,7 +262,7 @@ export default function TripResultsPage() {
               </Field>
               <Field label="每日通勤上限 (小时)">
                 <input
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+                  className="ts-input"
                   inputMode="decimal"
                   value={String(constraints.max_daily_commute_hours ?? 2)}
                   onChange={(e) =>
@@ -285,7 +272,7 @@ export default function TripResultsPage() {
               </Field>
               <Field label="最大转机次数">
                 <input
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+                  className="ts-input"
                   inputMode="numeric"
                   value={String(constraints.max_transfer_count)}
                   onChange={(e) =>
@@ -295,7 +282,7 @@ export default function TripResultsPage() {
               </Field>
               <Field label="酒店最低星级 (可选)">
                 <input
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+                  className="ts-input"
                   inputMode="numeric"
                   value={constraints.hotel_star_min == null ? '' : String(constraints.hotel_star_min)}
                   onChange={(e) =>
@@ -318,12 +305,12 @@ export default function TripResultsPage() {
               </Field>
             </div>
           ) : (
-            <div className="mt-4 text-sm text-zinc-400">尚未生成约束。</div>
+            <div className="mt-4 text-sm ts-muted">尚未生成约束。</div>
           )}
 
           <div className="mt-4">
             <button
-              className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-40"
+              className="ts-btn-primary w-full"
               type="button"
               disabled={!constraints || constraintsBusy}
               onClick={() => void confirmConstraints()}
@@ -335,33 +322,35 @@ export default function TripResultsPage() {
       ) : null}
 
       {!plans ? (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-          <div className="text-sm text-zinc-300">暂无方案，点击“重新生成方案”开始。</div>
+        <div className="ts-card">
+          <div className="text-sm">暂无方案，点击“重新生成方案”开始。</div>
         </div>
       ) : (
         <div className="space-y-4">
-          {savedPlans.length ? (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-              <div className="text-sm font-semibold">已保存的方案</div>
+          <div className="ts-card">
+            <div className="text-sm font-semibold">已保存的方案</div>
+            {savedPlans.length ? (
               <div className="mt-3 grid gap-2">
                 {savedPlans.slice(0, 6).map((sp) => (
-                  <div key={sp.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2">
-                    <div className="text-xs text-zinc-300">
+                  <div
+                    key={sp.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2"
+                    style={{ border: '1px solid var(--ts-border)', background: 'rgba(2,6,23,0.35)' }}
+                  >
+                    <div className="text-xs">
                       <span className="font-medium">{sp.label}</span>
-                      <span className="ml-2 text-zinc-500">#{sp.plan_index + 1}</span>
+                      <span className="ml-2 ts-muted">#{sp.plan_index + 1}</span>
                     </div>
-                    <button
-                      className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium hover:bg-indigo-500"
-                      type="button"
-                      onClick={() => void goItinerary(sp.plan_index, sp.plan_id)}
-                    >
+                    <button className="ts-btn-primary px-3 py-1.5 text-xs" type="button" onClick={() => void goItinerary(sp.plan_index, sp.plan_id)}>
                       生成行程
                     </button>
                   </div>
                 ))}
               </div>
-            </div>
-          ) : null}
+            ) : (
+              <div className="mt-2 text-sm ts-muted">尚未保存方案。你可以在下方选择并保存。</div>
+            )}
+          </div>
 
           <div className="grid gap-4">
             {plans.options.slice(0, 3).map((opt, idx) => (

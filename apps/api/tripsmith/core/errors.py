@@ -1,6 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
+
+
+class ErrorCategory(str, Enum):
+    VALIDATION = "VALIDATION"
+    PROVIDER = "PROVIDER"
+    LLM = "LLM"
+    JOB = "JOB"
+    RATE_LIMIT = "RATE_LIMIT"
+    INTERNAL = "INTERNAL"
+
+
+def make_error_code(category: ErrorCategory, code: str) -> str:
+    return f"{category.value}.{code}"
 
 
 @dataclass

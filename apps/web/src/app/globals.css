@@ -2,8 +2,88 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    --ts-bg: #0b1220;
+    --ts-surface: rgba(10, 15, 26, 0.6);
+    --ts-surface-strong: rgba(10, 15, 26, 0.85);
+    --ts-border: rgba(148, 163, 184, 0.25);
+    --ts-primary: #4f46e5;
+    --ts-primary-hover: #5b53f0;
+    --ts-text: #e5e7eb;
+    --ts-text-muted: rgba(229, 231, 235, 0.7);
+    --ts-shadow-card: 0 10px 30px rgba(0, 0, 0, 0.2);
+  }
+}
+
 html,
 body {
   height: 100%;
+  background: var(--ts-bg);
+  color: var(--ts-text);
+}
+
+@layer components {
+  .ts-container {
+    @apply mx-auto max-w-[1200px] px-6;
+  }
+
+  .ts-card {
+    @apply rounded-2xl p-4;
+    background: var(--ts-surface);
+    border: 1px solid var(--ts-border);
+    box-shadow: var(--ts-shadow-card);
+  }
+
+  .ts-card-strong {
+    @apply rounded-2xl p-4;
+    background: var(--ts-surface-strong);
+    border: 1px solid var(--ts-border);
+    box-shadow: var(--ts-shadow-card);
+  }
+
+  .ts-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors disabled:opacity-40;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--ts-bg)];
+  }
+
+  .ts-btn-primary {
+    @apply ts-btn text-white;
+    background: var(--ts-primary);
+  }
+  .ts-btn-primary:hover {
+    background: var(--ts-primary-hover);
+  }
+
+  .ts-btn-secondary {
+    @apply ts-btn text-zinc-100;
+    background: rgba(2, 6, 23, 0.35);
+    border: 1px solid var(--ts-border);
+  }
+  .ts-btn-secondary:hover {
+    background: rgba(2, 6, 23, 0.55);
+  }
+
+  .ts-input {
+    @apply w-full rounded-xl px-3 py-2 text-sm;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--ts-bg)];
+    background: rgba(2, 6, 23, 0.6);
+    border: 1px solid var(--ts-border);
+    color: var(--ts-text);
+  }
+
+  .ts-muted {
+    color: var(--ts-text-muted);
+  }
+
+  .ts-skeleton {
+    @apply animate-pulse rounded-xl;
+    background: rgba(148, 163, 184, 0.12);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+  }
+
+  .ts-mono {
+    @apply font-mono tabular-nums;
+  }
 }
 

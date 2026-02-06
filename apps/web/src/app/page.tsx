@@ -66,23 +66,23 @@ export default function HomePage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="space-y-2">
         <h1 className="text-lg font-semibold">开始规划你的旅行</h1>
-        <p className="text-sm text-zinc-400">
+        <p className="text-sm ts-muted">
           输入需求，生成 3 套方案（省钱/省时间/平衡），并可导出与订阅价格提醒。
         </p>
       </div>
 
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+      <div className="ts-card">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="出发地 (origin)">
             <input
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+              className="ts-input"
               value={origin}
               onChange={(e) => setOrigin(e.target.value)}
             />
           </Field>
           <Field label="目的地 (destination)">
             <input
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+              className="ts-input"
               value={destination}
               onChange={(e) => setDestination(e.target.value)}
             />
@@ -90,7 +90,7 @@ export default function HomePage() {
           <Field label="开始日期">
             <input
               type="date"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+              className="ts-input"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
             />
@@ -98,14 +98,14 @@ export default function HomePage() {
           <Field label="结束日期">
             <input
               type="date"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+              className="ts-input"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
             />
           </Field>
           <Field label="弹性日期（±天）">
             <input
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+              className="ts-input"
               value={flexDays}
               onChange={(e) => setFlexDays(e.target.value)}
               inputMode="numeric"
@@ -113,7 +113,7 @@ export default function HomePage() {
           </Field>
           <Field label="总预算（USD）">
             <input
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+              className="ts-input"
               value={budget}
               onChange={(e) => setBudget(e.target.value)}
               inputMode="decimal"
@@ -121,7 +121,7 @@ export default function HomePage() {
           </Field>
           <Field label="人数">
             <input
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+              className="ts-input"
               value={travelers}
               onChange={(e) => setTravelers(e.target.value)}
               inputMode="numeric"
@@ -129,17 +129,21 @@ export default function HomePage() {
           </Field>
           <Field label="偏好（逗号分隔）" hint="示例：balanced,walkable,food">
             <input
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+              className="ts-input"
               value={prefs}
               onChange={(e) => setPrefs(e.target.value)}
             />
           </Field>
         </div>
 
-        {error ? <div className="mt-4"><ErrorPanel error={error} onRetry={submit} /></div> : null}
+        {error ? (
+          <div className="mt-4">
+            <ErrorPanel error={error} onRetry={submit} />
+          </div>
+        ) : null}
 
         <button
-          className="mt-4 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-40"
+          className="ts-btn-primary mt-4 w-full"
           onClick={submit}
           disabled={!valid || loading}
           type="button"
@@ -148,9 +152,9 @@ export default function HomePage() {
         </button>
       </div>
 
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-300">
+      <div className="ts-card text-sm">
         <div className="font-medium">提示</div>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-zinc-400">
+        <ul className="mt-2 list-disc space-y-1 pl-5 ts-muted">
           <li>默认启用 Mock Providers，保证无任何 Key 也能跑通端到端。</li>
           <li>真实 POI/天气/路径 Provider 可在 `.env` 配置后启用。</li>
         </ul>

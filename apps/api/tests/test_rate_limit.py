@@ -28,6 +28,10 @@ def test_rate_limit_returns_429(client):
         resp2 = client.post(f"/api/trips/{trip_id}/plan", headers={"X-User-Id": "u"})
         assert resp1.status_code == 200
         assert resp2.status_code == 429
+        body = resp2.json()
+        assert body["error_code"] == "RATE_LIMIT.TOO_MANY_REQUESTS"
+        assert body["request_id"]
+        assert resp2.headers.get("Retry-After")
     finally:
         settings.rate_limit_per_minute = old
 

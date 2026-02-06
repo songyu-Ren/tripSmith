@@ -34,13 +34,14 @@ export class ApiError extends Error {
     message: string
     data?: ErrorResponse
     retryAfterSeconds?: number
+    requestId?: string
   }) {
     super(init.message)
     this.name = 'ApiError'
     this.status = init.status
     this.data = init.data
     this.errorCode = init.data?.error_code
-    this.requestId = init.data?.request_id
+    this.requestId = init.data?.request_id || init.requestId
     this.retryAfterSeconds = init.retryAfterSeconds
   }
 }
@@ -75,6 +76,7 @@ async function requestJson<T>(
   }
 
   const data = await parseError(resp)
+  const requestId = resp.headers.get('x-request-id') || undefined
   const retryAfterHeader = resp.headers.get('retry-after')
   const retryAfterSeconds =
     retryAfterHeader && /^\d+$/.test(retryAfterHeader)
@@ -85,6 +87,7 @@ async function requestJson<T>(
     status: resp.status,
     data,
     retryAfterSeconds,
+    requestId,
     message: data?.message || `HTTP ${resp.status}`
   })
 }

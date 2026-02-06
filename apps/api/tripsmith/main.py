@@ -21,6 +21,8 @@ from tripsmith.core.config import cors_origins
 from tripsmith.core.config import settings
 from tripsmith.core.db import get_db
 from tripsmith.core.errors import ApiException
+from tripsmith.core.errors import ErrorCategory
+from tripsmith.core.errors import make_error_code
 from tripsmith.core.ids import new_id
 from tripsmith.core.logging import log_event
 from tripsmith.core.rate_limit import check_rate_limit
@@ -62,7 +64,7 @@ def redis_dep() -> Redis:
 def create_app() -> FastAPI:
     docs_url = None if settings.disable_docs else "/docs"
     redoc_url = None if settings.disable_docs else "/redoc"
-    app = FastAPI(title="TripSmith API", version="0.2.0", docs_url=docs_url, redoc_url=redoc_url)
+    app = FastAPI(title="TripSmith API", version="0.2.1", docs_url=docs_url, redoc_url=redoc_url)
 
     app.add_middleware(
         CORSMiddleware,
@@ -144,7 +146,7 @@ def create_app() -> FastAPI:
         return _error_response(
             request=request,
             status_code=422,
-            error_code="validation_error",
+            error_code=make_error_code(ErrorCategory.VALIDATION, "SCHEMA_INVALID"),
             message="Invalid request",
             details=exc.errors(),
         )
@@ -154,7 +156,7 @@ def create_app() -> FastAPI:
         return _error_response(
             request=request,
             status_code=exc.status_code,
-            error_code="http_error",
+            error_code=make_error_code(ErrorCategory.INTERNAL, "HTTP_EXCEPTION"),
             message=str(exc.detail),
             details={"detail": exc.detail},
             headers=getattr(exc, "headers", None),
@@ -165,7 +167,7 @@ def create_app() -> FastAPI:
         return _error_response(
             request=request,
             status_code=500,
-            error_code="internal_error",
+            error_code=make_error_code(ErrorCategory.INTERNAL, "UNHANDLED_EXCEPTION"),
             message="Internal server error",
             details={"type": type(exc).__name__, "message": str(exc)},
         )
@@ -201,7 +203,11 @@ def create_app() -> FastAPI:
     ):
         user_id = sanitize_text(x_user_id or "anonymous")
         if payload.end_date < payload.start_date:
-            raise ApiException(status_code=400, error_code="bad_dates", message="end_date must be >= start_date")
+            raise ApiException(
+                status_code=400,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "BAD_DATES"),
+                message="end_date must be >= start_date",
+            )
         trip = Trip(
             id=new_id(),
             user_id=user_id,
@@ -231,7 +237,11 @@ def create_app() -> FastAPI:
         user_id = sanitize_text(x_user_id or "anonymous")
         trip: Trip | None = db.query(Trip).filter(Trip.id == trip_id, Trip.user_id == user_id).first()
         if not trip:
-            raise ApiException(status_code=404, error_code="not_found", message="trip not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "TRIP_NOT_FOUND"),
+                message="trip not found",
+            )
         plan: Plan | None = (
             db.query(Plan).filter(Plan.trip_id == trip_id).order_by(Plan.created_at.desc()).first()
         )
@@ -256,7 +266,11 @@ def create_app() -> FastAPI:
         user_id = sanitize_text(x_user_id or "anonymous")
         trip: Trip | None = db.query(Trip).filter(Trip.id == trip_id, Trip.user_id == user_id).first()
         if not trip:
-            raise ApiException(status_code=404, error_code="not_found", message="trip not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "TRIP_NOT_FOUND"),
+                message="trip not found",
+            )
         confirmed = trip.constraints_confirmed_at is not None
         return ConstraintsGetResponse(constraints=trip.constraints_json, confirmed=confirmed)
 
@@ -269,7 +283,11 @@ def create_app() -> FastAPI:
         user_id = sanitize_text(x_user_id or "anonymous")
         trip: Trip | None = db.query(Trip).filter(Trip.id == trip_id, Trip.user_id == user_id).first()
         if not trip:
-            raise ApiException(status_code=404, error_code="not_found", message="trip not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "TRIP_NOT_FOUND"),
+                message="trip not found",
+            )
         constraints = generate_constraints(trip=trip_to_dict(trip))
         trip.constraints_json = constraints.model_dump(mode="json")
         trip.constraints_confirmed_at = None
@@ -284,7 +302,7 @@ def create_app() -> FastAPI:
             output_json=redact_obj({"constraints": constraints.model_dump(mode="json")}),
             tool_calls_json=[],
             model_info={"provider": settings.llm_provider, "model": "mock", "temperature": 0},
-            prompt_version="v0.2.0",
+            prompt_version="v0.2.1",
             commit_hash=(settings.commit_hash or "unknown")[:64],
         )
         db.add(run)
@@ -301,7 +319,11 @@ def create_app() -> FastAPI:
         user_id = sanitize_text(x_user_id or "anonymous")
         trip: Trip | None = db.query(Trip).filter(Trip.id == trip_id, Trip.user_id == user_id).first()
         if not trip:
-            raise ApiException(status_code=404, error_code="not_found", message="trip not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "TRIP_NOT_FOUND"),
+                message="trip not found",
+            )
         trip.constraints_json = payload.constraints.model_dump(mode="json")
         trip.constraints_confirmed_at = dt.datetime.now(dt.timezone.utc)
         db.add(trip)
@@ -318,15 +340,23 @@ def create_app() -> FastAPI:
         user_id = sanitize_text(x_user_id or "anonymous")
         trip: Trip | None = db.query(Trip).filter(Trip.id == trip_id, Trip.user_id == user_id).first()
         if not trip:
-            raise ApiException(status_code=404, error_code="not_found", message="trip not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "TRIP_NOT_FOUND"),
+                message="trip not found",
+            )
         if trip.constraints_confirmed_at is None:
-            raise ApiException(status_code=400, error_code="constraints_not_confirmed", message="constraints must be confirmed first")
+            raise ApiException(
+                status_code=400,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "CONSTRAINTS_NOT_CONFIRMED"),
+                message="constraints must be confirmed first",
+            )
 
         rl = check_rate_limit(redis, user_id=user_id, route="plan", limit_per_minute=settings.rate_limit_per_minute)
         if not rl.allowed:
             raise ApiException(
                 status_code=429,
-                error_code="rate_limited",
+                error_code=make_error_code(ErrorCategory.RATE_LIMIT, "TOO_MANY_REQUESTS"),
                 message="Too many requests",
                 details={"retry_after_seconds": rl.retry_after_seconds},
                 headers={"Retry-After": str(rl.retry_after_seconds)},
@@ -339,9 +369,13 @@ def create_app() -> FastAPI:
             user_id=user_id,
             type="plan",
             status="queued",
+            stage="QUEUED",
             progress=0,
-            message="queued",
+            message="排队中",
             result_json=None,
+            error_code=None,
+            error_message=None,
+            next_action=None,
             created_at=now,
             updated_at=now,
         )
@@ -369,24 +403,36 @@ def create_app() -> FastAPI:
         user_id = sanitize_text(x_user_id or "anonymous")
         trip: Trip | None = db.query(Trip).filter(Trip.id == trip_id, Trip.user_id == user_id).first()
         if not trip:
-            raise ApiException(status_code=404, error_code="not_found", message="trip not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "TRIP_NOT_FOUND"),
+                message="trip not found",
+            )
         if payload.plan_id:
             plan = db.query(Plan).filter(Plan.id == payload.plan_id, Plan.trip_id == trip_id).first()
         else:
             plan = db.query(Plan).filter(Plan.trip_id == trip_id).order_by(Plan.created_at.desc()).first()
         if not plan:
-            raise ApiException(status_code=400, error_code="no_plan", message="plan required")
+            raise ApiException(
+                status_code=400,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "PLAN_REQUIRED"),
+                message="plan required",
+            )
         from tripsmith.schemas.plan import PlansJson
 
         plans_json = PlansJson.model_validate(plan.plans_json)
         if payload.plan_index >= len(plans_json.options):
-            raise ApiException(status_code=400, error_code="bad_plan_index", message="plan_index out of range")
+            raise ApiException(
+                status_code=400,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "PLAN_INDEX_OUT_OF_RANGE"),
+                message="plan_index out of range",
+            )
 
         rl = check_rate_limit(redis, user_id=user_id, route="itinerary", limit_per_minute=settings.rate_limit_per_minute)
         if not rl.allowed:
             raise ApiException(
                 status_code=429,
-                error_code="rate_limited",
+                error_code=make_error_code(ErrorCategory.RATE_LIMIT, "TOO_MANY_REQUESTS"),
                 message="Too many requests",
                 details={"retry_after_seconds": rl.retry_after_seconds},
                 headers={"Retry-After": str(rl.retry_after_seconds)},
@@ -399,9 +445,13 @@ def create_app() -> FastAPI:
             user_id=user_id,
             type="itinerary",
             status="queued",
+            stage="QUEUED",
             progress=0,
-            message="queued",
+            message="排队中",
             result_json={"plan_index": int(payload.plan_index), "plan_id": plan.id},
+            error_code=None,
+            error_message=None,
+            next_action=None,
             created_at=now,
             updated_at=now,
         )
@@ -427,7 +477,11 @@ def create_app() -> FastAPI:
         user_id = sanitize_text(x_user_id or "anonymous")
         job: Job | None = db.query(Job).filter(Job.id == job_id, Job.user_id == user_id).first()
         if not job:
-            raise ApiException(status_code=404, error_code="not_found", message="job not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "JOB_NOT_FOUND"),
+                message="job not found",
+            )
         return JobDto.model_validate(job)
 
     @app.get("/api/trips/{trip_id}/saved_plans", response_model=SavedPlansListResponse)
@@ -439,7 +493,11 @@ def create_app() -> FastAPI:
         user_id = sanitize_text(x_user_id or "anonymous")
         trip: Trip | None = db.query(Trip).filter(Trip.id == trip_id, Trip.user_id == user_id).first()
         if not trip:
-            raise ApiException(status_code=404, error_code="not_found", message="trip not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "TRIP_NOT_FOUND"),
+                message="trip not found",
+            )
         rows: list[SavedPlan] = (
             db.query(SavedPlan)
             .filter(SavedPlan.trip_id == trip_id)
@@ -458,17 +516,29 @@ def create_app() -> FastAPI:
         user_id = sanitize_text(x_user_id or "anonymous")
         trip: Trip | None = db.query(Trip).filter(Trip.id == trip_id, Trip.user_id == user_id).first()
         if not trip:
-            raise ApiException(status_code=404, error_code="not_found", message="trip not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "TRIP_NOT_FOUND"),
+                message="trip not found",
+            )
 
         plan: Plan | None = db.query(Plan).filter(Plan.id == payload.plan_id, Plan.trip_id == trip_id).first()
         if not plan:
-            raise ApiException(status_code=404, error_code="not_found", message="plan not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "PLAN_NOT_FOUND"),
+                message="plan not found",
+            )
 
         from tripsmith.schemas.plan import PlansJson
 
         plans_json = PlansJson.model_validate(plan.plans_json)
         if payload.plan_index >= len(plans_json.options):
-            raise ApiException(status_code=400, error_code="bad_plan_index", message="plan_index out of range")
+            raise ApiException(
+                status_code=400,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "PLAN_INDEX_OUT_OF_RANGE"),
+                message="plan_index out of range",
+            )
 
         now = dt.datetime.now(dt.timezone.utc)
         row = SavedPlan(
@@ -492,10 +562,18 @@ def create_app() -> FastAPI:
         user_id = sanitize_text(x_user_id or "anonymous")
         trip: Trip | None = db.query(Trip).filter(Trip.id == trip_id, Trip.user_id == user_id).first()
         if not trip:
-            raise ApiException(status_code=404, error_code="not_found", message="trip not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "TRIP_NOT_FOUND"),
+                message="trip not found",
+            )
         it: Itinerary | None = db.query(Itinerary).filter(Itinerary.trip_id == trip_id).order_by(Itinerary.created_at.desc()).first()
         if not it:
-            raise ApiException(status_code=400, error_code="no_itinerary", message="itinerary required")
+            raise ApiException(
+                status_code=400,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "ITINERARY_REQUIRED"),
+                message="itinerary required",
+            )
         from tripsmith.schemas.itinerary import ItineraryJson
 
         ics = to_ics(trip_id=trip_id, itinerary=ItineraryJson.model_validate(it.itinerary_json))
@@ -510,10 +588,18 @@ def create_app() -> FastAPI:
         user_id = sanitize_text(x_user_id or "anonymous")
         trip: Trip | None = db.query(Trip).filter(Trip.id == trip_id, Trip.user_id == user_id).first()
         if not trip:
-            raise ApiException(status_code=404, error_code="not_found", message="trip not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "TRIP_NOT_FOUND"),
+                message="trip not found",
+            )
         it: Itinerary | None = db.query(Itinerary).filter(Itinerary.trip_id == trip_id).order_by(Itinerary.created_at.desc()).first()
         if not it:
-            raise ApiException(status_code=400, error_code="no_itinerary", message="itinerary required")
+            raise ApiException(
+                status_code=400,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "ITINERARY_REQUIRED"),
+                message="itinerary required",
+            )
         return PlainTextResponse(content=it.itinerary_md, media_type="text/markdown")
 
     @app.post("/api/alerts", response_model=AlertCreateResponse)
@@ -525,7 +611,11 @@ def create_app() -> FastAPI:
         user_id = sanitize_text(x_user_id or "anonymous")
         trip: Trip | None = db.query(Trip).filter(Trip.id == payload.trip_id, Trip.user_id == user_id).first()
         if not trip:
-            raise ApiException(status_code=404, error_code="not_found", message="trip not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "TRIP_NOT_FOUND"),
+                message="trip not found",
+            )
         alert = Alert(
             id=new_id(),
             trip_id=payload.trip_id,
@@ -555,11 +645,19 @@ def create_app() -> FastAPI:
         x_user_id: str | None = Header(default=None, alias="X-User-Id"),
     ):
         if not settings.dev_mode:
-            raise ApiException(status_code=404, error_code="not_found", message="not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "NOT_FOUND"),
+                message="not found",
+            )
         user_id = sanitize_text(x_user_id or "anonymous")
         trip: Trip | None = db.query(Trip).filter(Trip.id == trip_id, Trip.user_id == user_id).first()
         if not trip:
-            raise ApiException(status_code=404, error_code="not_found", message="trip not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "TRIP_NOT_FOUND"),
+                message="trip not found",
+            )
         runs = db.query(AgentRun).filter(AgentRun.trip_id == trip_id).order_by(AgentRun.created_at.desc()).all()
         return AgentRunListResponse(runs=[AgentRunDto.model_validate(r) for r in runs])
 
@@ -569,10 +667,18 @@ def create_app() -> FastAPI:
         db: Session = Depends(get_db),
     ):
         if not settings.dev_mode:
-            raise ApiException(status_code=404, error_code="not_found", message="not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "NOT_FOUND"),
+                message="not found",
+            )
         run: AgentRun | None = db.query(AgentRun).filter(AgentRun.id == run_id).first()
         if not run:
-            raise ApiException(status_code=404, error_code="not_found", message="run not found")
+            raise ApiException(
+                status_code=404,
+                error_code=make_error_code(ErrorCategory.VALIDATION, "RUN_NOT_FOUND"),
+                message="run not found",
+            )
         return AgentRunDto.model_validate(run)
 
     return app
