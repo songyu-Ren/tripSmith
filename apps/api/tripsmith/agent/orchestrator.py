@@ -150,20 +150,20 @@ async def generate_plans(*, redis: Redis, trip: dict) -> tuple[PlansJson, str, l
         daily_load_score = float(scorecard["daily_load_score"])
         warnings: list[str] = []
         if total_cost > float(trip["budget_total"]):
-            warnings.append("预算可能不足；此方案会超出预算")
+            warnings.append("Budget may be insufficient; this option exceeds your budget")
         if c.flight.stops >= 2:
-            warnings.append("转机较多；注意签证/行李衔接")
+            warnings.append("Many transfers; watch visas and baggage connections")
         rationale_md = (
-            f"- 费用评分：{cost_score:.0f}/100（预算 {float(trip['budget_total']):.0f}）\n"
-            f"- 时间评分：{time_score:.0f}/100（飞行 {int(c.flight.duration_minutes)} 分钟）\n"
-            f"- 舒适评分：{comfort_score:.0f}/100（转机 {int(c.flight.stops)} 次）\n"
-            f"- 通勤评分：{commute_score:.0f}/100（每日通勤估计 {int(c.daily_commute_minutes_estimate)} 分钟）\n"
-            f"- 日负荷评分：{daily_load_score:.0f}/100\n"
+            f"- Cost score: {cost_score:.0f}/100 (budget {float(trip['budget_total']):.0f})\n"
+            f"- Time score: {time_score:.0f}/100 (flight {int(c.flight.duration_minutes)} min)\n"
+            f"- Comfort score: {comfort_score:.0f}/100 (transfers {int(c.flight.stops)})\n"
+            f"- Commute score: {commute_score:.0f}/100 (daily commute est. {int(c.daily_commute_minutes_estimate)} min)\n"
+            f"- Daily load score: {daily_load_score:.0f}/100\n"
         )
         options.append(
             PlanOption(
                 label=label,
-                title={"cheap": "省钱方案", "fast": "省时间方案", "balanced": "平衡方案"}[label],
+                title={"cheap": "Budget option", "fast": "Time-saver option", "balanced": "Balanced option"}[label],
                 flight=FlightSummary(
                     depart_at=c.flight.depart_at,
                     arrive_at=c.flight.arrive_at,
@@ -212,7 +212,7 @@ async def generate_plans(*, redis: Redis, trip: dict) -> tuple[PlansJson, str, l
     if issues:
         for opt in plans.options:
             if opt.metrics.total_price.amount > float(trip["budget_total"]):
-                opt.warnings.append("系统自检：预算约束无法满足，已输出最接近方案")
+                opt.warnings.append("System check: budget constraint cannot be satisfied; returning the closest option")
 
     explain_md = render_plans_markdown(trip=trip, plans=plans)
     return plans, explain_md, tool_calls
@@ -303,7 +303,7 @@ async def generate_itinerary(*, redis: Redis, trip: dict, plan: PlansJson, plan_
     if issues:
         for day in itinerary.days:
             for item in day.items:
-                item.weather_summary = item.weather_summary + " | 注意：行程偏紧，建议适当删减"
+                item.weather_summary = item.weather_summary + " | Note: schedule is tight; consider removing some items"
         issues2 = verify_itinerary(itinerary=itinerary)
         if issues2:
             pass
@@ -313,28 +313,28 @@ async def generate_itinerary(*, redis: Redis, trip: dict, plan: PlansJson, plan_
 
 
 def _explain(label: str, cost_score: float, time_score: float, comfort_score: float, warnings: list[str]) -> str:
-    tag = {"cheap": "更偏省钱", "fast": "更偏省时", "balanced": "更偏均衡"}[label]
-    core = f"{tag}。评分：成本 {cost_score:.0f}/100，时间 {time_score:.0f}/100，舒适 {comfort_score:.0f}/100。"
+    tag = {"cheap": "More budget-focused", "fast": "More time-focused", "balanced": "More balanced"}[label]
+    core = f"{tag}. Scores: cost {cost_score:.0f}/100, time {time_score:.0f}/100, comfort {comfort_score:.0f}/100."
     if warnings:
-        return core + " 风险：" + "；".join(warnings)
+        return core + " Risks: " + "; ".join(warnings)
     return core
 
 
 def render_plans_markdown(*, trip: dict, plans: PlansJson) -> str:
     lines: list[str] = []
-    lines.append("# TripSmith 方案\n")
+    lines.append("# TripSmith Plans\n")
     lines.append(f"- {trip['origin']} → {trip['destination']}\n")
-    lines.append(f"- 日期：{trip['start_date']} ~ {trip['end_date']}\n")
-    lines.append(f"- 预算：{trip['budget_total']} {trip['currency']}，人数：{trip['travelers']}\n")
-    lines.append("\n## 3 套方案\n")
+    lines.append(f"- Dates: {trip['start_date']} ~ {trip['end_date']}\n")
+    lines.append(f"- Budget: {trip['budget_total']} {trip['currency']}, travelers: {trip['travelers']}\n")
+    lines.append("\n## 3 Options\n")
     for opt in plans.options:
         lines.append(f"### {opt.title}\n")
-        lines.append(f"- 总价：{opt.metrics.total_price.amount:.0f} {opt.metrics.total_price.currency}\n")
-        lines.append(f"- 航班：{opt.flight.depart_at} → {opt.flight.arrive_at}，转机 {opt.flight.stops} 次，{opt.flight.duration_minutes} 分钟\n")
-        lines.append(f"- 住宿：{opt.stay.area}，{opt.stay.nightly_price.amount:.0f}/{opt.stay.nightly_price.currency} 每晚\n")
-        lines.append(f"- 解释：{opt.explanation}\n")
+        lines.append(f"- Total: {opt.metrics.total_price.amount:.0f} {opt.metrics.total_price.currency}\n")
+        lines.append(f"- Flight: {opt.flight.depart_at} → {opt.flight.arrive_at}, transfers {opt.flight.stops}, {opt.flight.duration_minutes} min\n")
+        lines.append(f"- Stay: {opt.stay.area}, {opt.stay.nightly_price.amount:.0f} {opt.stay.nightly_price.currency}/night\n")
+        lines.append(f"- Explanation: {opt.explanation}\n")
         if opt.warnings:
-            lines.append("- 提示：" + "；".join(opt.warnings) + "\n")
+            lines.append("- Notes: " + "; ".join(opt.warnings) + "\n")
         lines.append("\n")
     return "".join(lines)
 
@@ -342,17 +342,17 @@ def render_plans_markdown(*, trip: dict, plans: PlansJson) -> str:
 def render_itinerary_markdown(*, trip: dict, plan: PlansJson, plan_index: int, itinerary: ItineraryJson) -> str:
     opt = plan.options[plan_index]
     lines: list[str] = []
-    lines.append("# TripSmith 行程\n")
-    lines.append(f"- 方案：{opt.title}\n")
-    lines.append(f"- 总价：{opt.metrics.total_price.amount:.0f} {opt.metrics.total_price.currency}\n\n")
+    lines.append("# TripSmith Itinerary\n")
+    lines.append(f"- Plan: {opt.title}\n")
+    lines.append(f"- Total: {opt.metrics.total_price.amount:.0f} {opt.metrics.total_price.currency}\n\n")
     for day in itinerary.days:
         lines.append(f"## {day.date.isoformat()}\n")
         for item in day.items:
             lines.append(
-                f"- {item.period}：{item.poi_name}（停留 {item.stay_minutes} 分钟，通勤 {item.commute.minutes} 分钟，天气：{item.weather_summary}）\n"
+                f"- {item.period}: {item.poi_name} (stay {item.stay_minutes} min, commute {item.commute.minutes} min, weather: {item.weather_summary})\n"
             )
         lines.append("\n")
-    lines.append("\n## 导出\n")
+    lines.append("\n## Export\n")
     lines.append(f"- ICS: {trip.get('id','')}/export/ics\n")
     lines.append(f"- Markdown: {trip.get('id','')}/export/md\n")
     return "".join(lines)

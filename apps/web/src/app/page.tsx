@@ -65,29 +65,29 @@ export default function HomePage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="space-y-2">
-        <h1 className="text-lg font-semibold">开始规划你的旅行</h1>
+        <h1 className="text-lg font-semibold">Start planning your trip</h1>
         <p className="text-sm ts-muted">
-          输入需求，生成 3 套方案（省钱/省时间/平衡），并可导出与订阅价格提醒。
+          Enter your preferences to generate 3 options (budget/time/balanced), then export or subscribe to price alerts.
         </p>
       </div>
 
       <div className="ts-card">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="出发地 (origin)">
+          <Field label="Origin (origin)">
             <input
               className="ts-input"
               value={origin}
               onChange={(e) => setOrigin(e.target.value)}
             />
           </Field>
-          <Field label="目的地 (destination)">
+          <Field label="Destination (destination)">
             <input
               className="ts-input"
               value={destination}
               onChange={(e) => setDestination(e.target.value)}
             />
           </Field>
-          <Field label="开始日期">
+          <Field label="Start date">
             <input
               type="date"
               className="ts-input"
@@ -95,7 +95,7 @@ export default function HomePage() {
               onChange={(e) => setStartDate(e.target.value)}
             />
           </Field>
-          <Field label="结束日期">
+          <Field label="End date">
             <input
               type="date"
               className="ts-input"
@@ -103,7 +103,7 @@ export default function HomePage() {
               onChange={(e) => setEndDate(e.target.value)}
             />
           </Field>
-          <Field label="弹性日期（±天）">
+          <Field label="Flex days (± days)">
             <input
               className="ts-input"
               value={flexDays}
@@ -111,7 +111,7 @@ export default function HomePage() {
               inputMode="numeric"
             />
           </Field>
-          <Field label="总预算（USD）">
+          <Field label="Total budget (USD)">
             <input
               className="ts-input"
               value={budget}
@@ -119,7 +119,7 @@ export default function HomePage() {
               inputMode="decimal"
             />
           </Field>
-          <Field label="人数">
+          <Field label="Travelers">
             <input
               className="ts-input"
               value={travelers}
@@ -127,7 +127,7 @@ export default function HomePage() {
               inputMode="numeric"
             />
           </Field>
-          <Field label="偏好（逗号分隔）" hint="示例：balanced,walkable,food">
+          <Field label="Preferences (comma-separated)" hint="Example: balanced,walkable,food">
             <input
               className="ts-input"
               value={prefs}
@@ -148,15 +148,15 @@ export default function HomePage() {
           disabled={!valid || loading}
           type="button"
         >
-          {loading ? '创建中…' : '生成方案'}
+          {loading ? 'Creating…' : 'Generate plans'}
         </button>
       </div>
 
       <div className="ts-card text-sm">
-        <div className="font-medium">提示</div>
+        <div className="font-medium">Notes</div>
         <ul className="mt-2 list-disc space-y-1 pl-5 ts-muted">
-          <li>默认启用 Mock Providers，保证无任何 Key 也能跑通端到端。</li>
-          <li>真实 POI/天气/路径 Provider 可在 `.env` 配置后启用。</li>
+          <li>Mock providers are enabled by default, so it works end-to-end without any keys.</li>
+          <li>Real POI/weather/routing providers can be enabled via `.env`.</li>
         </ul>
       </div>
     </div>

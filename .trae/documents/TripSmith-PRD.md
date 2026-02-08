@@ -1,41 +1,41 @@
-## 1. 产品概述
-TripSmith 是一个开源旅行规划 Copilot：输入出发地/目的地/日期/预算/偏好，系统通过可插拔 Provider（航班/住宿/POI/天气/路径）检索候选数据，再由 Agent 按“省钱/省时间/平衡”生成至少 3 套可解释方案，并可进一步生成逐日行程、导出与订阅价格提醒。
+## 1. Product overview
+TripSmith is an open-source travel planning copilot: enter origin/destination/dates/budget/preferences, the system retrieves candidate data via pluggable providers (flights/stays/POI/weather/routing), then an agent generates at least 3 explainable options (budget/time/balanced). You can further generate a day-by-day itinerary, export it, and subscribe to price alerts.
 
-## 2. 核心能力（必须可跑通端到端）
+## 2. Core capabilities (must work end-to-end)
 
-### 2.1 用户与身份
-- 首期不做完整账号体系，使用匿名 `user_id` 存 Cookie，并在请求头携带用于隔离数据。
-- 后续可扩展为真实登录（不影响当前数据模型）。
+### 2.1 Users and identity
+- MVP does not implement a full account system. It stores an anonymous `user_id` in a cookie and sends it in request headers to isolate data.
+- Can be extended to real auth later (without changing the current data model).
 
-### 2.2 页面与流程
-TripSmith 的核心页面：
-1. **首页**：旅行需求表单（origin, destination, dates, flexible dates, budget, travelers, preferences）。
-2. **结果页**：展示 3 套方案（省钱/省时间/平衡），并支持订阅价格提醒。
-3. **行程页**：基于选中方案生成逐日 itinerary（上午/下午/晚上），含 POI、停留时间、通勤方式与时长、天气摘要。
-4. **导出**：ICS（日历）与 Markdown（计划书）。
+### 2.2 Pages and flow
+Core pages:
+1. **Home**: trip requirement form (origin, destination, dates, flex days, budget, travelers, preferences).
+2. **Results**: show 3 options (budget/time/balanced) and support subscribing to price alerts.
+3. **Itinerary**: generate a day-by-day itinerary (morning/afternoon/evening) from a selected option, including POIs, stay duration, commute mode/duration, and weather summary.
+4. **Export**: ICS (calendar) and Markdown (plan doc).
 
-### 2.3 关键交互与状态
-- 表单校验：缺失字段与日期不合法要清晰提示。
-- Loading：创建 trip、生成 plan、生成 itinerary、导出链接均显示加载状态。
-- 错误处理：前端请求失败应显示可理解的错误信息，并提供重试（指数退避最多 2 次）。
-- 移动端：表单与方案卡片在窄屏下单列堆叠。
-- 价格提醒：订阅后在结果页展示“已订阅”状态。
+### 2.3 Key interactions and states
+- Form validation: missing fields and invalid dates should be clearly communicated.
+- Loading: show loading states for creating trips, generating plans, generating itineraries, and export links.
+- Error handling: frontend failures show understandable messages and provide retry (exponential backoff up to 2 times).
+- Mobile: form and plan cards stack into a single column on narrow screens.
+- Price alerts: show a “Subscribed” state on the results page after subscribing.
 
-## 3. 用户主流程
-1) 首页填写需求 → 创建 Trip。
-2) 在结果页触发生成 Plan → 获得 3 套方案（结构化 JSON + explain Markdown）。
-3) 选择其中一套方案 → 生成逐日 Itinerary。
-4) 导出 ICS/Markdown 或订阅价格提醒。
+## 3. Primary user flow
+1) Enter requirements on Home → create Trip.
+2) Generate plan on Results → get 3 options (structured JSON + explanation Markdown).
+3) Choose an option → generate day-by-day itinerary.
+4) Export ICS/Markdown or subscribe to price alerts.
 
 ```mermaid
 graph TD
-  A["首页：填写需求"] --> B["创建 Trip"]
-  B --> C["结果页：生成 3 套方案"]
-  C --> D["行程页：生成逐日行程"]
-  C --> E["订阅价格提醒"]
-  C --> F["导出 ICS/Markdown"]
+  A["Home: enter requirements"] --> B["Create Trip"]
+  B --> C["Results: generate 3 options"]
+  C --> D["Itinerary: generate day-by-day itinerary"]
+  C --> E["Subscribe to price alerts"]
+  C --> F["Export ICS/Markdown"]
   D --> F
 ```
 
-## 4. 成功标准（MVP）
-- 无任何外部 Key 的情况下（Mock Providers + LLM mock），可通过 `docker-compose up` 启动全站，并完成：创建 Trip → 生成 Plan → 生成 Itinerary → 导出 ICS/Markdown → 创建 Alert → 后台任务产出 Notification（日志模拟发送）。
+## 4. Success criteria (MVP)
+- With no external keys (mock providers + mock LLM), the full stack starts via `docker-compose up` and completes: create Trip → generate Plan → generate Itinerary → export ICS/Markdown → create Alert → background task produces Notification (simulated via logs).

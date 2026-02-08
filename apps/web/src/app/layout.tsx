@@ -2,8 +2,8 @@ import './globals.css'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'TripSmith | 旅行方案生成',
-  description: '输入出行条件，生成 3 套可解释旅行方案'
+  title: 'TripSmith | Travel planning',
+  description: 'Enter trip preferences and generate 3 explainable travel options'
 }
 
 export default function RootLayout({
@@ -12,13 +12,13 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="zh-CN">
+    <html lang="en">
       <body>
         <div className="min-h-screen">
           <header className="border-b" style={{ borderColor: 'var(--ts-border)' }}>
             <div className="ts-container flex items-center justify-between py-4">
               <div className="text-sm font-semibold tracking-wide">TripSmith</div>
-              <div className="text-xs ts-muted">旅行规划 Copilot（MVP）</div>
+              <div className="text-xs ts-muted">Travel planning Copilot (MVP)</div>
             </div>
           </header>
           <main className="ts-container py-6">{children}</main>

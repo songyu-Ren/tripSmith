@@ -126,7 +126,7 @@ def _fail_job(
     job.status = "failed"
     job.stage = "FAILED"
     job.progress = 100
-    job.message = "失败"
+    job.message = "Failed"
     job.error_code = error_code[:64]
     job.error_message = error_message[:256]
     job.next_action = next_action[:256]
@@ -144,7 +144,7 @@ def run_plan_job(job_id: str) -> None:
         job: Job | None = db.query(Job).filter(Job.id == job_id).first()
         if not job:
             return
-        _set_step(db, job, stage="STARTING", progress=5, message="启动任务")
+        _set_step(db, job, stage="STARTING", progress=5, message="Starting job")
         job.status = "running"
         db.add(job)
         db.commit()
@@ -156,7 +156,7 @@ def run_plan_job(job_id: str) -> None:
                 job,
                 error_code=make_error_code(ErrorCategory.JOB, "TRIP_NOT_FOUND"),
                 error_message="trip not found",
-                next_action="返回结果页确认 trip 是否存在，或重新创建行程。",
+                next_action="Go back to the results page to confirm the trip exists, or create a new one.",
             )
             return
         if trip.constraints_confirmed_at is None:
@@ -165,12 +165,12 @@ def run_plan_job(job_id: str) -> None:
                 job,
                 error_code=make_error_code(ErrorCategory.JOB, "CONSTRAINTS_NOT_CONFIRMED"),
                 error_message="constraints not confirmed",
-                next_action="先在结果页完成“确认约束”，再重新生成方案。",
+                next_action='Confirm constraints on the results page, then regenerate plans.',
             )
             return
 
         redis = get_redis()
-        _set_step(db, job, stage="FETCH_CANDIDATES", progress=20, message="抓取候选数据")
+        _set_step(db, job, stage="FETCH_CANDIDATES", progress=20, message="Fetching candidates")
 
         trip_dict = {
             "id": trip.id,
@@ -189,21 +189,21 @@ def run_plan_job(job_id: str) -> None:
             "constraints_confirmed_at": trip.constraints_confirmed_at,
         }
 
-        _set_step(db, job, stage="GENERATE", progress=45, message="生成方案")
+        _set_step(db, job, stage="GENERATE", progress=45, message="Generating plans")
         plans, explain_md, _tool_calls = asyncio.run(generate_plans(redis=redis, trip=trip_dict))
 
-        _set_step(db, job, stage="VALIDATE", progress=65, message="校验输出")
+        _set_step(db, job, stage="VALIDATE", progress=65, message="Validating output")
         if not getattr(plans, "options", None) or len(plans.options) < 3:  # type: ignore[attr-defined]
             _fail_job(
                 db,
                 job,
                 error_code=make_error_code(ErrorCategory.JOB, "PLAN_OUTPUT_INVALID"),
                 error_message="plans.options must contain at least 3 options",
-                next_action="稍后重试；若持续失败，检查 LLM/Provider 配置或使用 mock provider。",
+                next_action="Retry later. If it keeps failing, check LLM/provider configuration or use mock providers.",
             )
             return
 
-        _set_step(db, job, stage="PERSIST", progress=80, message="写入数据库")
+        _set_step(db, job, stage="PERSIST", progress=80, message="Saving to database")
 
         plan_row = Plan(
             id=new_id(),
@@ -215,7 +215,7 @@ def run_plan_job(job_id: str) -> None:
         db.add(plan_row)
         db.commit()
 
-        _set_step(db, job, stage="COMPLETE", progress=100, message="完成", result_json={"plan_id": plan_row.id})
+        _set_step(db, job, stage="COMPLETE", progress=100, message="Complete", result_json={"plan_id": plan_row.id})
         job.status = "succeeded"
         job.error_code = None
         job.error_message = None
@@ -231,7 +231,7 @@ def run_plan_job(job_id: str) -> None:
                     job,
                     error_code=make_error_code(ErrorCategory.INTERNAL, "WORKER_EXCEPTION"),
                     error_message=f"{type(e).__name__}: {str(e)}",
-                    next_action="稍后重试；若持续失败，检查后台日志并确认 Provider/LLM 配置。",
+                    next_action="Retry later. If it keeps failing, check server logs and confirm provider/LLM configuration.",
                 )
                 log_event(
                     "job_failed",
@@ -257,7 +257,7 @@ def run_itinerary_job(job_id: str) -> None:
         job: Job | None = db.query(Job).filter(Job.id == job_id).first()
         if not job:
             return
-        _set_step(db, job, stage="STARTING", progress=5, message="启动任务")
+        _set_step(db, job, stage="STARTING", progress=5, message="Starting job")
         job.status = "running"
         db.add(job)
         db.commit()
@@ -269,7 +269,7 @@ def run_itinerary_job(job_id: str) -> None:
                 job,
                 error_code=make_error_code(ErrorCategory.JOB, "TRIP_NOT_FOUND"),
                 error_message="trip not found",
-                next_action="返回结果页确认 trip 是否存在，或重新创建行程。",
+                next_action="Go back to the results page to confirm the trip exists, or create a new one.",
             )
             return
         plan_id = (job.result_json or {}).get("plan_id")
@@ -283,7 +283,7 @@ def run_itinerary_job(job_id: str) -> None:
                 job,
                 error_code=make_error_code(ErrorCategory.JOB, "PLAN_REQUIRED"),
                 error_message="plan required",
-                next_action="先生成方案，再生成逐日行程。",
+                next_action="Generate a plan first, then generate the daily itinerary.",
             )
             return
 
@@ -308,21 +308,21 @@ def run_itinerary_job(job_id: str) -> None:
             "constraints_confirmed_at": trip.constraints_confirmed_at,
         }
 
-        _set_step(db, job, stage="GENERATE", progress=45, message="生成逐日行程")
+        _set_step(db, job, stage="GENERATE", progress=45, message="Generating daily itinerary")
         itinerary_json, itinerary_md, _tool_calls = asyncio.run(generate_itinerary(redis=redis, trip=trip_dict, plan=plans_json, plan_index=plan_index))
 
-        _set_step(db, job, stage="VALIDATE", progress=65, message="校验输出")
+        _set_step(db, job, stage="VALIDATE", progress=65, message="Validating output")
         if not getattr(itinerary_json, "days", None):  # type: ignore[attr-defined]
             _fail_job(
                 db,
                 job,
                 error_code=make_error_code(ErrorCategory.JOB, "ITINERARY_OUTPUT_INVALID"),
                 error_message="itinerary.days is empty",
-                next_action="稍后重试；若持续失败，尝试更换方案或收紧约束。",
+                next_action="Retry later. If it keeps failing, try a different plan or tighten constraints.",
             )
             return
 
-        _set_step(db, job, stage="PERSIST", progress=80, message="写入数据库")
+        _set_step(db, job, stage="PERSIST", progress=80, message="Saving to database")
 
         it_row = Itinerary(
             id=new_id(),
@@ -340,7 +340,7 @@ def run_itinerary_job(job_id: str) -> None:
             job,
             stage="COMPLETE",
             progress=100,
-            message="完成",
+            message="Complete",
             result_json={
                 "itinerary_id": it_row.id,
                 "itinerary_json": itinerary_json.model_dump(mode="json"),
@@ -362,7 +362,7 @@ def run_itinerary_job(job_id: str) -> None:
                     job,
                     error_code=make_error_code(ErrorCategory.INTERNAL, "WORKER_EXCEPTION"),
                     error_message=f"{type(e).__name__}: {str(e)}",
-                    next_action="稍后重试；若持续失败，检查后台日志并确认 Provider/LLM 配置。",
+                    next_action="Retry later. If it keeps failing, check server logs and confirm provider/LLM configuration.",
                 )
                 log_event(
                     "job_failed",

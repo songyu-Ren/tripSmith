@@ -50,32 +50,32 @@ export function AlertModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
       <div className="w-full max-w-md ts-card">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold">订阅价格提醒</div>
+          <div className="text-sm font-semibold">Subscribe to price alerts</div>
           <button
             className="ts-btn-secondary px-2 py-1 text-xs"
             onClick={onClose}
             type="button"
-            aria-label="关闭订阅弹窗"
+            aria-label="Close subscription modal"
           >
-            关闭
+            Close
           </button>
         </div>
         <div className="mt-4 space-y-3">
           <div className="space-y-1">
-            <div className="text-xs ts-muted">类型</div>
+            <div className="text-xs ts-muted">Type</div>
             <select
               className="ts-input"
               value={type}
               onChange={(e) => setType(e.target.value as AlertCreateRequest['type'])}
             >
-              <option value="flight">机票</option>
-              <option value="hotel">酒店</option>
-              <option value="both">机票+酒店</option>
+              <option value="flight">Flight</option>
+              <option value="hotel">Hotel</option>
+              <option value="both">Flight + hotel</option>
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <div className="text-xs ts-muted">阈值（USD）</div>
+              <div className="text-xs ts-muted">Threshold (USD)</div>
               <input
                 className="ts-input"
                 value={threshold}
@@ -84,7 +84,7 @@ export function AlertModal({
               />
             </div>
             <div className="space-y-1">
-              <div className="text-xs ts-muted">频率（分钟）</div>
+              <div className="text-xs ts-muted">Frequency (minutes)</div>
               <input
                 className="ts-input"
                 value={frequency}
@@ -104,7 +104,7 @@ export function AlertModal({
             disabled={!valid || loading}
             type="button"
           >
-            {loading ? '提交中…' : '确认订阅'}
+            {loading ? 'Submitting…' : 'Confirm subscription'}
           </button>
         </div>
       </div>

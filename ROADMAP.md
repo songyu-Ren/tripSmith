@@ -1,32 +1,31 @@
 # ROADMAP
 
-本路线图以“每天可交付的小步迭代”为原则，按优先级记录 Next 事项。
+This roadmap follows the principle of “small, shippable daily increments” and tracks next items by priority.
 
-## Now（已具备）
+## Now (available)
 
-- Trip / Constraints / Plan / Itinerary 端到端闭环（含导出）
-- Saved Plans：保存方案并从保存方案生成行程
-- Job：异步执行、进度/阶段、失败原因与 next action
-- 统一错误响应：error_code + request_id（dev 下可带 details）
-- 基础 UI：三页闭环（首页→结果→行程），包含错误卡片与重试
+- Trip / Constraints / Plan / Itinerary end-to-end flow (including exports)
+- Saved plans: save a plan and generate an itinerary from saved plans
+- Jobs: async execution, progress/stage, failure reasons, and next action
+- Unified error response: error_code + request_id (dev can include details)
+- Core UI: 3-page loop (home → results → itinerary) with error panel and retry
 
-## Next（优先级）
+## Next (priorities)
 
-### P0（稳定性与契约）
+### P0 (stability and contracts)
 
-- packages/shared 作为单一真源：从 API OpenAPI 自动生成 types，并增加契约测试（OpenAPI 变更触发前端编译校验）
-- Job 事件流标准化：阶段枚举统一、阶段到进度映射固定，并加入 request_id/trace_id 贯穿 worker 日志
-- 错误码体系完善：将 Provider/LLM 错误映射为 PROVIDER.* / LLM.*，并加入可观测指标（失败率、耗时）
+- Make packages/shared the single source of truth: generate types from API OpenAPI and add contract tests (OpenAPI changes should break the frontend build)
+- Standardize job events: unify stage enums, fix stage→progress mapping, and thread request_id/trace_id through worker logs
+- Expand error code taxonomy: map provider/LLM errors to PROVIDER.* / LLM.* and add observable metrics (failure rate, latency)
 
-### P1（可用性与体验）
+### P1 (usability and UX)
 
-- 方案对比升级：评分卡可视化、差异高亮、维度一键切换
-- 行程页可编辑：改时间/改 POI/删条目/重排，并保存（含回滚）
-- Loading / Skeleton / Empty states 全覆盖，并梳理文案一致性
+- Plan comparison upgrade: scorecard visualization, diff highlights, one-click dimension switching
+- Editable itinerary: change time/POI, delete/reorder items, save with rollback
+- Complete Loading/Skeleton/Empty states coverage and unify copywriting
 
-### P2（产品能力扩展）
+### P2 (product expansion)
 
-- 地图体验：MapLibre + OSM（行程页展示 POI 标记与线路）
-- 价格提醒引擎增强：去抖动、阈值类型（绝对/百分比）、频率控制
-- 引入一个真实 Provider 参考实现（其余保持 stub + mock fallback）
-
+- Map experience: MapLibre + OSM (POI markers and route lines on itinerary page)
+- Improve price alert engine: debouncing, threshold types (absolute/percent), frequency control
+- Add one real provider reference implementation (keep the rest as stubs + mock fallbacks)

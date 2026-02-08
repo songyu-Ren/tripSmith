@@ -84,7 +84,7 @@ export function ErrorPanel({ error, onRetry }: Props) {
 
       <div className="mt-3 flex flex-wrap gap-2">
         <button className="ts-btn-secondary text-xs" type="button" onClick={() => void navigator.clipboard.writeText(copyText)}>
-          复制详情
+          Copy details
         </button>
         <button
           className="ts-btn text-xs text-white"
@@ -93,7 +93,7 @@ export function ErrorPanel({ error, onRetry }: Props) {
           disabled={retrying}
           onClick={() => void handleRetry()}
         >
-          {retrying ? '重试中…' : '重试'}
+          {retrying ? 'Retrying…' : 'Retry'}
         </button>
       </div>
     </div>

@@ -64,8 +64,8 @@ export default function TripResultsPage() {
     onFailed: async (j) => {
       setPlanJobId(null)
       setGenLoading(false)
-      const msg = j.error_message || j.message || '任务失败'
-      const next = j.next_action ? `\n\n下一步：${j.next_action}` : ''
+      const msg = j.error_message || j.message || 'Job failed'
+      const next = j.next_action ? `\n\nNext: ${j.next_action}` : ''
       throw new Error(`${msg}${next}`)
     }
   })
@@ -79,7 +79,7 @@ export default function TripResultsPage() {
     setError(null)
     try {
       if (!constraintsConfirmed) {
-        throw new Error('请先确认约束条件，再生成方案。')
+        throw new Error('Please confirm constraints before generating plans.')
       }
       const r = await api().createPlan(tripId)
       setPlanJobId(r.job_id)
@@ -145,10 +145,10 @@ export default function TripResultsPage() {
         <div className="space-y-1">
           <div className="text-xs ts-muted">
             <Link className="hover:underline" href="/">
-              ← 返回
+              ← Back
             </Link>
           </div>
-          <h1 className="text-lg font-semibold">方案结果</h1>
+          <h1 className="text-lg font-semibold">Plan results</h1>
         </div>
         <button
           className="ts-btn-primary"
@@ -156,7 +156,7 @@ export default function TripResultsPage() {
           disabled={genLoading || !constraintsConfirmed}
           type="button"
         >
-          {genLoading ? '生成中…' : constraintsConfirmed ? '重新生成方案' : '请先确认约束'}
+          {genLoading ? 'Generating…' : constraintsConfirmed ? 'Regenerate plans' : 'Confirm constraints first'}
         </button>
       </div>
 
@@ -180,13 +180,13 @@ export default function TripResultsPage() {
       {planJobId ? (
         <div className="ts-card">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-sm font-semibold">生成方案中…</div>
+            <div className="text-sm font-semibold">Generating plans…</div>
             <div className="text-xs ts-muted">{planJob?.progress ?? 0}%</div>
           </div>
           <div className="mt-2 h-2 w-full overflow-hidden rounded bg-zinc-800">
             <div className="h-2 bg-indigo-600" style={{ width: `${planJob?.progress ?? 0}%` }} />
           </div>
-          <div className="mt-2 text-xs ts-muted">{planJob?.message || planJob?.stage || '排队中'}</div>
+          <div className="mt-2 text-xs ts-muted">{planJob?.message || planJob?.stage || 'Queued'}</div>
         </div>
       ) : null}
 
@@ -200,7 +200,7 @@ export default function TripResultsPage() {
               {data.trip.start_date} ~ {data.trip.end_date}
             </div>
             <div className="ts-muted">
-              预算 {data.trip.budget_total} {data.trip.currency} · {data.trip.travelers} 人
+              Budget {data.trip.budget_total} {data.trip.currency} · {data.trip.travelers} travelers
             </div>
           </div>
         </div>
@@ -210,9 +210,9 @@ export default function TripResultsPage() {
         <div className="ts-card">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold">确认约束</div>
+              <div className="text-sm font-semibold">Confirm constraints</div>
               <div className="mt-1 text-xs ts-muted">
-                系统会先生成可解释的约束条件，你可微调后确认，再开始生成方案。
+                Generate an explainable set of constraints, adjust if needed, then confirm to start plan generation.
               </div>
             </div>
             <button
@@ -221,13 +221,13 @@ export default function TripResultsPage() {
               disabled={constraintsBusy}
               type="button"
             >
-              {constraintsBusy ? '处理中…' : constraints ? '重新生成约束' : '生成约束'}
+              {constraintsBusy ? 'Working…' : constraints ? 'Regenerate constraints' : 'Generate constraints'}
             </button>
           </div>
 
           {constraints ? (
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Field label="节奏 (pace)">
+              <Field label="Pace (pace)">
                 <select
                   className="ts-input"
                   value={constraints.pace}
@@ -240,7 +240,7 @@ export default function TripResultsPage() {
                   <option value="packed">packed</option>
                 </select>
               </Field>
-              <Field label="每日步行容忍 (km)">
+              <Field label="Daily walking tolerance (km)">
                 <input
                   className="ts-input"
                   inputMode="decimal"
@@ -250,7 +250,7 @@ export default function TripResultsPage() {
                   }
                 />
               </Field>
-              <Field label="每日活动上限 (小时)">
+              <Field label="Max daily activities (hours)">
                 <input
                   className="ts-input"
                   inputMode="decimal"
@@ -260,7 +260,7 @@ export default function TripResultsPage() {
                   }
                 />
               </Field>
-              <Field label="每日通勤上限 (小时)">
+              <Field label="Max daily commute (hours)">
                 <input
                   className="ts-input"
                   inputMode="decimal"
@@ -270,7 +270,7 @@ export default function TripResultsPage() {
                   }
                 />
               </Field>
-              <Field label="最大转机次数">
+              <Field label="Max transfers">
                 <input
                   className="ts-input"
                   inputMode="numeric"
@@ -280,7 +280,7 @@ export default function TripResultsPage() {
                   }
                 />
               </Field>
-              <Field label="酒店最低星级 (可选)">
+              <Field label="Min hotel stars (optional)">
                 <input
                   className="ts-input"
                   inputMode="numeric"
@@ -293,7 +293,7 @@ export default function TripResultsPage() {
                   }
                 />
               </Field>
-              <Field label="允许红眼航班">
+              <Field label="Allow red-eye flights">
                 <label className="flex items-center gap-2 text-sm text-zinc-200">
                   <input
                     type="checkbox"
@@ -305,7 +305,7 @@ export default function TripResultsPage() {
               </Field>
             </div>
           ) : (
-            <div className="mt-4 text-sm ts-muted">尚未生成约束。</div>
+            <div className="mt-4 text-sm ts-muted">Constraints have not been generated yet.</div>
           )}
 
           <div className="mt-4">
@@ -315,7 +315,7 @@ export default function TripResultsPage() {
               disabled={!constraints || constraintsBusy}
               onClick={() => void confirmConstraints()}
             >
-              {constraintsBusy ? '提交中…' : '确认约束并继续'}
+              {constraintsBusy ? 'Submitting…' : 'Confirm and continue'}
             </button>
           </div>
         </div>
@@ -323,12 +323,12 @@ export default function TripResultsPage() {
 
       {!plans ? (
         <div className="ts-card">
-          <div className="text-sm">暂无方案，点击“重新生成方案”开始。</div>
+          <div className="text-sm">No plans yet. Click “Regenerate plans” to start.</div>
         </div>
       ) : (
         <div className="space-y-4">
           <div className="ts-card">
-            <div className="text-sm font-semibold">已保存的方案</div>
+            <div className="text-sm font-semibold">Saved plans</div>
             {savedPlans.length ? (
               <div className="mt-3 grid gap-2">
                 {savedPlans.slice(0, 6).map((sp) => (
@@ -342,13 +342,13 @@ export default function TripResultsPage() {
                       <span className="ml-2 ts-muted">#{sp.plan_index + 1}</span>
                     </div>
                     <button className="ts-btn-primary px-3 py-1.5 text-xs" type="button" onClick={() => void goItinerary(sp.plan_index, sp.plan_id)}>
-                      生成行程
+                      Generate itinerary
                     </button>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="mt-2 text-sm ts-muted">尚未保存方案。你可以在下方选择并保存。</div>
+              <div className="mt-2 text-sm ts-muted">No saved plans yet. Pick one below and save it.</div>
             )}
           </div>
 

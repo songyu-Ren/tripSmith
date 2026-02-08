@@ -35,8 +35,8 @@ export default function TripItineraryPage() {
       setLoading(false)
     },
     onFailed: async (j: JobDto) => {
-      const msg = j.error_message || j.message || '任务失败'
-      const next = j.next_action ? `\n\n下一步：${j.next_action}` : ''
+      const msg = j.error_message || j.message || 'Job failed'
+      const next = j.next_action ? `\n\nNext: ${j.next_action}` : ''
       throw new Error(`${msg}${next}`)
     }
   })
@@ -75,9 +75,9 @@ export default function TripItineraryPage() {
   const days = result?.itinerary_json?.days || []
 
   const periodLabels: Record<ItineraryItem['period'], string> = {
-    morning: '上午',
-    afternoon: '下午',
-    evening: '晚上'
+    morning: 'Morning',
+    afternoon: 'Afternoon',
+    evening: 'Evening'
   }
 
   return (
@@ -85,17 +85,17 @@ export default function TripItineraryPage() {
       <div className="space-y-1">
         <div className="text-xs ts-muted">
           <Link className="hover:underline" href={`/trips/${tripId}`}>
-            ← 返回方案
+            ← Back to plans
           </Link>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-lg font-semibold">逐日行程</h1>
+          <h1 className="text-lg font-semibold">Daily itinerary</h1>
           <button
             className="ts-btn-secondary"
             onClick={generate}
             type="button"
           >
-            重新生成
+            Regenerate
           </button>
         </div>
       </div>
@@ -111,7 +111,7 @@ export default function TripItineraryPage() {
       {job && job.status !== 'succeeded' ? (
         <div className="ts-card">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-sm font-semibold">任务进度</div>
+            <div className="text-sm font-semibold">Job progress</div>
             <div className="text-xs ts-muted">{job.progress}%</div>
           </div>
           <div className="mt-2 h-2 w-full overflow-hidden rounded bg-zinc-800">
@@ -142,7 +142,7 @@ export default function TripItineraryPage() {
                 <summary className="cursor-pointer list-none select-none">
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-sm font-semibold">{day.date}</div>
-                    <div className="text-xs ts-muted">{day.items.length} 项</div>
+                    <div className="text-xs ts-muted">{day.items.length} items</div>
                   </div>
                 </summary>
 
@@ -152,7 +152,7 @@ export default function TripItineraryPage() {
                       <summary className="cursor-pointer list-none select-none">
                         <div className="flex items-center justify-between gap-3">
                           <div className="text-sm font-semibold">{periodLabels[p]}</div>
-                          <div className="text-xs ts-muted">{byPeriod[p].length ? `${byPeriod[p].length} 项` : '无安排'}</div>
+                          <div className="text-xs ts-muted">{byPeriod[p].length ? `${byPeriod[p].length} items` : 'No plans'}</div>
                         </div>
                       </summary>
 
@@ -163,15 +163,16 @@ export default function TripItineraryPage() {
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <div className="text-sm font-medium">{item.poi_name}</div>
                                 <div className="text-xs ts-muted">
-                                  通勤 <span className="ts-mono">{item.commute.minutes}</span> 分钟 · 停留 <span className="ts-mono">{item.stay_minutes}</span> 分钟
+                                  Commute <span className="ts-mono">{item.commute.minutes}</span> min · Stay{' '}
+                                  <span className="ts-mono">{item.stay_minutes}</span> min
                                 </div>
                               </div>
-                              <div className="mt-1 text-xs ts-muted">天气：{item.weather_summary || '暂无'}</div>
+                              <div className="mt-1 text-xs ts-muted">Weather: {item.weather_summary || 'N/A'}</div>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <div className="mt-2 text-sm ts-muted">此时段暂无安排。</div>
+                        <div className="mt-2 text-sm ts-muted">No items for this time period.</div>
                       )}
                     </details>
                   ))}
@@ -182,13 +183,13 @@ export default function TripItineraryPage() {
         </div>
       ) : result && !error ? (
         <div className="ts-card">
-          <div className="text-sm">暂无可展示的行程内容。</div>
-          <div className="mt-1 text-xs ts-muted">你可以点击“重新生成”再试一次。</div>
+          <div className="text-sm">No itinerary content to display.</div>
+          <div className="mt-1 text-xs ts-muted">Click “Regenerate” to try again.</div>
         </div>
       ) : null}
 
       <div className="ts-card">
-        <div className="text-sm font-semibold">导出</div>
+        <div className="text-sm font-semibold">Export</div>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <a
             className="ts-btn-primary flex-1"
@@ -196,7 +197,7 @@ export default function TripItineraryPage() {
             target="_blank"
             rel="noreferrer"
           >
-            导出 ICS
+            Export ICS
           </a>
           <a
             className="ts-btn-secondary flex-1"
@@ -204,11 +205,11 @@ export default function TripItineraryPage() {
             target="_blank"
             rel="noreferrer"
           >
-            导出 Markdown
+            Export Markdown
           </a>
         </div>
         <div className="mt-2 text-xs ts-muted">
-          导出接口需要已生成 itinerary。
+          Export endpoints require an existing itinerary.
         </div>
       </div>
     </div>

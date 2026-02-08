@@ -86,7 +86,7 @@ def test_job_failure_writes_next_action(client):
             status="queued",
             stage="QUEUED",
             progress=0,
-            message="排队中",
+            message="Queued",
             result_json=None,
             error_code=None,
             error_message=None,
@@ -170,5 +170,5 @@ def test_export_md_contains_heading(client):
     assert client.get(f"/api/jobs/{it_job['job_id']}", headers={"X-User-Id": "u"}).json()["status"] == "succeeded"
     resp = client.get(f"/api/trips/{trip_id}/export/md", headers={"X-User-Id": "u"})
     assert resp.status_code == 200
-    assert resp.text.startswith("# TripSmith 行程")
+    assert resp.text.startswith("# TripSmith Itinerary")
 

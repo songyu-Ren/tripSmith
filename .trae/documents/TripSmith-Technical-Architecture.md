@@ -1,4 +1,4 @@
-## 1. 架构设计
+## 1. Architecture
 ```mermaid
 graph TD
   U["Browser"] --> W["apps/web (Next.js)"]
@@ -21,39 +21,39 @@ graph TD
   end
 ```
 
-## 2. 技术选型
-- 前端：Next.js + TypeScript + Tailwind CSS
-- 后端：FastAPI + Pydantic + SQLAlchemy + Alembic
-- 数据库：Postgres（Docker）
-- 缓存与限流：Redis（Docker）
-- 后台任务：Celery + Beat（Docker）
-- Agent：多步可靠流程（约束提取 → 工具检索 → 方案优化 → 行程写作 → 自检）
-- typed client：`packages/shared` 基于 FastAPI OpenAPI 生成 TypeScript 类型
+## 2. Technology choices
+- Frontend: Next.js + TypeScript + Tailwind CSS
+- Backend: FastAPI + Pydantic + SQLAlchemy + Alembic
+- Database: Postgres (Docker)
+- Cache and rate limiting: Redis (Docker)
+- Background jobs: Celery + Beat (Docker)
+- Agent: multi-step reliable flow (constraint extraction → tool retrieval → plan optimization → itinerary writing → self-check)
+- Typed client: `packages/shared` generates TypeScript types from FastAPI OpenAPI
 
-## 3. 前端路由
+## 3. Frontend routes
 | Route | Purpose |
 |-------|---------|
-| / | 首页：旅行需求表单 |
-| /trips/[id] | 结果页：展示 3 套方案 |
-| /trips/[id]/itinerary | 行程页：逐日行程 |
+| / | Home: trip requirements form |
+| /trips/[id] | Results: show 3 options |
+| /trips/[id]/itinerary | Itinerary: day-by-day itinerary |
 
-## 4. 后端 API（FastAPI，前缀 `/api`）
+## 4. Backend API (FastAPI, prefix `/api`)
 
-### 4.1 Endpoint 列表
+### 4.1 Endpoint list
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | /api/trips | 创建 trip（保存用户输入） |
-| POST | /api/trips/{id}/plan | 触发 agent 生成 3 套方案（JSON + Markdown） |
-| GET | /api/trips/{id} | 获取 trip + 最新 plan |
-| POST | /api/trips/{id}/itinerary | 基于选中方案生成逐日 itinerary |
-| GET | /api/trips/{id}/export/ics | 导出 ICS |
-| GET | /api/trips/{id}/export/md | 导出 Markdown |
-| POST | /api/alerts | 创建价格提醒 |
-| GET | /api/health | 健康检查 |
+| POST | /api/trips | Create a trip (persist user input) |
+| POST | /api/trips/{id}/plan | Trigger agent to generate 3 options (JSON + Markdown) |
+| GET | /api/trips/{id} | Fetch trip + latest plan |
+| POST | /api/trips/{id}/itinerary | Generate day-by-day itinerary from a selected plan |
+| GET | /api/trips/{id}/export/ics | Export ICS |
+| GET | /api/trips/{id}/export/md | Export Markdown |
+| POST | /api/alerts | Create a price alert |
+| GET | /api/health | Health check |
 
-### 4.2 错误模型与重试
-- 后端使用一致的错误响应：`{ "error": { "code": string, "message": string, "details"?: any } }`。
-- 前端对幂等读取与生成类接口允许指数退避最多 2 次；对 429（限流）遵循 `Retry-After`。
+### 4.2 Error model and retries
+- The backend returns a consistent error response: `{ "error": { "code": string, "message": string, "details"?: any } }`.
+- The frontend retries idempotent reads and generation endpoints with exponential backoff up to 2 times; for 429 (rate limiting) it follows `Retry-After`.
 
 ## 5. API 内部模块
 ```mermaid
@@ -70,8 +70,8 @@ graph TD
   SVC --> TQ["Celery Queue"]
 ```
 
-## 6. 数据模型（必须落库）
-### 6.1 ER 图
+## 6. Data model (persisted)
+### 6.1 ER diagram
 ```mermaid
 erDiagram
   TRIPS ||--o{ PLANS : has
@@ -127,26 +127,26 @@ erDiagram
   }
 ```
 
-### 6.2 迁移策略
-- 通过 Alembic 维护 schema。
-- 生产建议开启更严格的鉴权；当前 MVP 以 `user_id`（cookie/header）进行数据隔离。
+### 6.2 Migration strategy
+- Maintain schema via Alembic.
+- Production should use stricter auth; current MVP isolates data via `user_id` (cookie/header).
 
-## 7. Agent 与 Provider 插件
-### 7.1 多步可靠流程
-1) 约束提取：把 Trip 输入转为硬约束与偏好参数。
-2) 工具检索：调用 Provider 获取候选 flights/stays/poi/weather/routing，并写入缓存。
-3) 方案优化：从候选中输出 3 套方案，满足预算/日期/活动时长等硬约束。
-4) 行程写作：将方案扩展为逐日 itinerary（上午/下午/晚上），补全通勤与天气摘要。
-5) 自检：Verifier 检查预算、时间窗、通勤过长、景点重复、过密；失败最多回退优化 2 次。
+## 7. Agent and provider plugins
+### 7.1 Multi-step reliable flow
+1) Constraint extraction: turn Trip input into hard constraints and preference parameters.
+2) Tool retrieval: call providers to fetch candidate flights/stays/poi/weather/routing and cache results.
+3) Plan optimization: output 3 options from candidates while satisfying budget/dates/activity duration hard constraints.
+4) Itinerary writing: expand the option into a day-by-day itinerary (morning/afternoon/evening), filling commute and weather summaries.
+5) Self-check: verifier checks budget, time windows, excessive commute, duplicate POIs, overpacking; on failure, roll back and optimize up to 2 times.
 
-### 7.2 Provider 插件接口
+### 7.2 Provider plugin interfaces
 - FlightsProvider / StaysProvider / PoiProvider / WeatherProvider / RoutingProvider。
-- 默认启用 MockProvider 保证无 key 可跑通；真实 Provider 不可用时必须 fallback。
+- MockProvider is enabled by default so the system runs without keys; real providers must fall back when unavailable.
 
-## 8. 部署（Docker Compose）
-- `postgres`、`redis`、`api`、`celery_worker`、`celery_beat`、`web` 一键启动。
-- 生产部署建议：Web（Vercel/自托管），API（容器/VM），Postgres/Redis 托管化，关闭 docs 或加简单保护。
+## 8. Deployment (Docker Compose)
+- One-command bring-up: `postgres`, `redis`, `api`, `celery_worker`, `celery_beat`, `web`.
+- Production suggestions: Web (Vercel/self-hosted), API (container/VM), managed Postgres/Redis, disable docs or protect them.
 
-## 9. 测试范围
-- API：pytest 覆盖 schema 校验、mock provider、optimizer、export 生成、限流与缓存。
-- Web：至少 typecheck + lint；可补充基础组件渲染测试。
+## 9. Test scope
+- API: pytest coverage for schema validation, mock providers, optimizer, export generation, rate limiting, and caching.
+- Web: at least typecheck + lint; optionally add basic component render tests.
